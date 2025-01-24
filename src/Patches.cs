@@ -20,6 +20,7 @@ namespace CarcassYieldTweaker
 
             internal static void ClearAll()
             {
+                Main.DebugLog("Clearing HarvestState.");
                 pendingChange = false;
                 lastItemChanged = null;
                 savedHarvestTime = 0f;
@@ -343,6 +344,7 @@ namespace CarcassYieldTweaker
                     try
                     {
                         // Clear custom state and modified harvest times
+                        Main.DebugLog("Panel_BodyHarvest closed. Clearing Settings.");
                         HarvestState.ClearAll();
                         __instance.m_HarvestTimeMinutes = 0f;
                     }
@@ -374,7 +376,7 @@ namespace CarcassYieldTweaker
                                 if (conditionLabel != null)
                                 {
                                     UnityEngine.Object.Destroy(conditionLabel.gameObject);
-                                    Main.DebugLog("ConditionLabel destroyed during panel close.");
+                                    Main.DebugLog("Panel_BodyHarvest Closed. Clearing ConditionLabel.");
                                 }
                             }
 
@@ -385,7 +387,7 @@ namespace CarcassYieldTweaker
                                 if (customFrozenLabel != null)
                                 {
                                     UnityEngine.Object.Destroy(customFrozenLabel.gameObject);
-                                    Main.DebugLog("CustomFrozenLabel destroyed during panel close.");
+                                    Main.DebugLog("Panel_BodyHarvest Closed. Clearing CustomFrozenLabel.");
                                 }
                             }
                         }
