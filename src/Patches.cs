@@ -20,7 +20,7 @@ namespace CarcassYieldTweaker
 
             internal static void ClearAll()
             {
-                Main.DebugLog("Clearing HarvestState.");
+                Main.DebugLog("HarvestState.ClearAll; Clearing - pendingChange, lastItemChanged, savedHarvestTime, lastUnmodifiedTime");
                 pendingChange = false;
                 lastItemChanged = null;
                 savedHarvestTime = 0f;
@@ -333,7 +333,7 @@ namespace CarcassYieldTweaker
                 }
             }
 
-            /*[HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.Enable), new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
+            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.Enable), new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
             internal class Patch_ClearHarvestSettings
             {
                 static void Prefix(Il2Cpp.Panel_BodyHarvest __instance, bool enable)
@@ -344,9 +344,9 @@ namespace CarcassYieldTweaker
                     try
                     {
                         // Clear custom state and modified harvest times
-                        Main.DebugLog("Panel_BodyHarvest closed. Clearing Settings.");
-                        HarvestState.ClearAll();
+                        Main.DebugLog("Patch_ClearHarvestSettings: Panel_BodyHarvest closed, clearing m_HarvestTimeMinutes.");
                         __instance.m_HarvestTimeMinutes = 0f;
+                        HarvestState.ClearAll();
                     }
                     catch (Exception ex)
                     { 
@@ -376,7 +376,7 @@ namespace CarcassYieldTweaker
                                 if (conditionLabel != null)
                                 {
                                     UnityEngine.Object.Destroy(conditionLabel.gameObject);
-                                    Main.DebugLog("Panel_BodyHarvest Closed. Clearing ConditionLabel.");
+                                    Main.DebugLog("Patch_ClearConditionAndFrozenLabels: Panel_BodyHarvest Closed. Clearing ConditionLabel.");
                                 }
                             }
 
@@ -387,7 +387,7 @@ namespace CarcassYieldTweaker
                                 if (customFrozenLabel != null)
                                 {
                                     UnityEngine.Object.Destroy(customFrozenLabel.gameObject);
-                                    Main.DebugLog("Panel_BodyHarvest Closed. Clearing CustomFrozenLabel.");
+                                    Main.DebugLog("Patch_ClearConditionAndFrozenLabels: Panel_BodyHarvest Closed. Clearing CustomFrozenLabel.");
                                 }
                             }
                         }
@@ -397,7 +397,7 @@ namespace CarcassYieldTweaker
                       MelonLogger.Error($"Error in ClearConditionAndFrozenLabels: {ex}");
                     }
                 }
-            }*/
+            }
 
 
             private static readonly UnityEngine.Color Green = new UnityEngine.Color(0, 0.808f, 0.518f, 1);
