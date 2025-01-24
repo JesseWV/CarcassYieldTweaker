@@ -7,7 +7,7 @@ namespace CarcassYieldTweaker
     public class Main : MelonMod
     {
 
-        internal static bool debug_mode = true; // Set to false to disable debug logging
+        internal static bool debug_mode = false; // Set to false to disable debug logging
         internal static void DebugLog(string message)
         {
             if (debug_mode)

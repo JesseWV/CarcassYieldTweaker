@@ -333,7 +333,7 @@ namespace CarcassYieldTweaker
                 }
             }
 
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.Enable), new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
+            /*[HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.Enable), new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
             internal class Patch_ClearHarvestSettings
             {
                 static void Prefix(Il2Cpp.Panel_BodyHarvest __instance, bool enable)
@@ -397,7 +397,7 @@ namespace CarcassYieldTweaker
                       MelonLogger.Error($"Error in ClearConditionAndFrozenLabels: {ex}");
                     }
                 }
-            }
+            }*/
 
 
             private static readonly UnityEngine.Color Green = new UnityEngine.Color(0, 0.808f, 0.518f, 1);
@@ -407,8 +407,6 @@ namespace CarcassYieldTweaker
             private static readonly UnityEngine.Color White = new UnityEngine.Color(1, 1, 1, 1);
             private static readonly UnityEngine.Color Cyan = new UnityEngine.Color(0.447f, 0.765f, 0.765f, 1);
             private static readonly UnityEngine.Color Blue = new UnityEngine.Color(0, 0.251f, 0.502f, 1);
-
-
 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.RefreshTitle))]
             public class PanelBodyHarvest_ConditionLabel_Patch
@@ -464,7 +462,7 @@ namespace CarcassYieldTweaker
                     }
                 }
             }
-
+            /*
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.RefreshTitle))]
             public class PanelBodyHarvest_FrozenLabel_Patch
             {
@@ -526,7 +524,7 @@ namespace CarcassYieldTweaker
 
                     }
                 }
-            }
+            }*/
         } // End of Panel_BodyHarvest_Patches
 
 
@@ -568,6 +566,7 @@ namespace CarcassYieldTweaker
                             __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.QuarterSizeSliderDoe,1));
                             __instance.m_QuarterDurationMinutes = (float)Settings.instance.QuarterDurationMinutesSliderDoe;
                             __instance.m_FatToMeatRatio = Settings.instance.FatToMeatPercentSliderDoe / 100f;
+
                         }
 
                         if (__instance.name.StartsWith("WILDLIFE_Stag"))
@@ -579,6 +578,7 @@ namespace CarcassYieldTweaker
                             __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.QuarterSizeSliderStag, 1));
                             __instance.m_QuarterDurationMinutes = (float)Settings.instance.QuarterDurationMinutesSliderStag;
                             __instance.m_FatToMeatRatio = Settings.instance.FatToMeatPercentSliderStag / 100f;
+
                         }
 
                         if (__instance.name.StartsWith("WILDLIFE_Moose"))

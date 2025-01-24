@@ -436,8 +436,6 @@ namespace CarcassYieldTweaker
             this.QuarterWasteSliderGlobal = 1.2f;
         }
 
-
-
         [Section("Presets")]
 
         [Name("Select a Preset")]
