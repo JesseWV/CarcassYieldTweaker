@@ -24,6 +24,7 @@
     <PackageReference Include="STBlade.Modding.TLD.ModSettings" Version="1.9.0" />
     <PackageReference Include="System.Text.Json" Version="6.0.11" />
   </ItemGroup>
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-  </Target>
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<Exec Command="xcopy /y &quot;$(TargetDir)$(TargetName).dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods\&quot;&#xD;&#xA;" />
+	</Target>
 </Project>

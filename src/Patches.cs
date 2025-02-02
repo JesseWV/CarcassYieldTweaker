@@ -1,10 +1,10 @@
 ﻿using HarmonyLib;
 using Il2Cpp;
 using Il2CppTLD.IntBackedUnit;
-using JetBrains.Annotations;
 using MelonLoader;
 using System;
 using UnityEngine;
+using static CarcassYieldTweaker.Patches.Panel_BodyHarvest_Time_Patches;
 
 
 namespace CarcassYieldTweaker
@@ -13,90 +13,12 @@ namespace CarcassYieldTweaker
     {
         internal static class HarvestState
         {
-            internal static bool pendingChange = false;
-            internal static string lastItemChanged = null;
-            internal static float savedHarvestTime = 0f; // Holds the last known harvest time before switching tabs
-            internal static float lastUnmodifiedTime = 0f; // Holds the last unmodified harvest time to use for tool changes
-
-            internal static void ClearAll()
-            {
-                Main.DebugLog("HarvestState.ClearAll; Clearing - pendingChange, lastItemChanged, savedHarvestTime, lastUnmodifiedTime");
-                pendingChange = false;
-                lastItemChanged = null;
-                savedHarvestTime = 0f;
-                lastUnmodifiedTime = 0f;
-            }
-
+            internal static bool toolChanged = false; 
+            internal static bool logPending = false;
         }
-        private static string FormatTimeLog(float original, float adjusted, float multiplier)
+
+        internal static class Panel_BodyHarvest_Time_Patches
         {
-            return $"{original:F1}m -> {adjusted:F1}m ({multiplier:F1}x)";
-        }
-        internal static class Panel_BodyHarvest_Patches
-        {
-
-
-
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.GetHarvestDurationMinutes))]
-            internal class Patch_HarvestDuration
-            {
-                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance, ref float __result)
-                {
-                    if (__instance == null || string.IsNullOrEmpty(__instance.name)) return;
-
-                    try
-                    {
-                        // First store unmodified total harvest time for future ratio calculations
-                        float newUnmodifiedTime = __result;
-
-                        // Get the animal type
-                        string animalType = __instance.m_BodyHarvest.name;
-
-                        // Check if the last change was a tool switch
-                        if (HarvestState.pendingChange && HarvestState.lastItemChanged == "ToolSwitch")
-                        {
-                            if (HarvestState.lastUnmodifiedTime > 0) // Check if we have a previous unmodified time to compare against
-                            {
-                                float ratio = newUnmodifiedTime / HarvestState.lastUnmodifiedTime;
-                                float toolAdjustedTotalHarvestTime = __instance.m_HarvestTimeMinutes * ratio;
-
-                                __result = toolAdjustedTotalHarvestTime;
-                                __instance.m_HarvestTimeMinutes = toolAdjustedTotalHarvestTime; // Update the instance variable
-
-                                Main.DebugLog($"[Tool Switch] Ratio: {ratio:F2} - New time: {toolAdjustedTotalHarvestTime:F2}");
-                            }
-
-                            HarvestState.lastUnmodifiedTime = newUnmodifiedTime; // Update for next comparison
-                        }
-                        else if (HarvestState.pendingChange && !string.IsNullOrEmpty(HarvestState.lastItemChanged))
-                        {
-                            // If the change was an item change (Meat, Gut, Hide), use the item-based multiplier
-                            float multiplier = GetRoundedMultiplier(HarvestState.lastItemChanged, animalType); // Pass item type and animal type
-                            float itemAdjustedItemHarvestTime = __result * multiplier;
-
-                            __instance.m_HarvestTimeMinutes = itemAdjustedItemHarvestTime;
-
-                            Main.DebugLog($"[{animalType}:{HarvestState.lastItemChanged}] {__result:F2} -> {itemAdjustedItemHarvestTime:F2} (x{multiplier:F1})");
-
-                            __result = itemAdjustedItemHarvestTime;
-
-                            HarvestState.lastUnmodifiedTime = newUnmodifiedTime; // Update for next comparison
-                        }
-                        else if (__instance.m_HarvestTimeMinutes > 0f)
-                        {
-                            __result = __instance.m_HarvestTimeMinutes;
-                        }
-
-                        // Reset pending change and last item changed
-                        HarvestState.pendingChange = false;
-                        HarvestState.lastItemChanged = null;
-                    }
-                    catch (Exception ex)
-                    {
-                        MelonLogger.Error($"Error in Patch_HarvestDuration: {ex}");
-                    }
-                }
-            }
 
             private static float GetRoundedMultiplier(string itemType, string animalType)
             {
@@ -202,103 +124,282 @@ namespace CarcassYieldTweaker
                             rawMultiplier = Settings.instance.FrozenMeatTimeSliderGlobal;
                         else if (itemType == "Gut")
                             rawMultiplier = Settings.instance.GutTimeSliderGlobal;
-                        Main.DebugLog($"[UNKNOWN:{animalType}] GLOBAL multiplier: {rawMultiplier:F1}");
+                        Main.DebugLog($"[UNKNOWN:{animalType}] GLOBAL multiplier: {rawMultiplier:F2}");
                         break;
                 }
 
                 return (float)Math.Round(rawMultiplier, 2);
             }
+            internal static float ConvertItemWeightToFloat(Il2CppTLD.IntBackedUnit.ItemWeight itemWeight)
+            {
+                // Convert the scaled value in m_Units to a float in kilograms
+                return (float)itemWeight.m_Units / 1_000_000_000f;
+            }
 
-            // Button Press Panel_BodyHarvest_Patches: Set pendingChange and record which button
+
+            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.GetHarvestDurationMinutes))]
+            internal class Patch_HarvestDuration
+            {
+                private static float previousUnmodifiedTotalTime = -1f;
+                private static bool baseMeatTimeDiscovered = false;
+                private static bool baseHideTimeDiscovered = false;
+                private static bool baseGutTimeDiscovered = false;
+                private static float baseMeatTimePerKg = 0f;
+                private static float baseHideTimePerUnit = 0f;
+                private static float baseGutTimePerUnit = 0f;
+
+                private static float lastMeatAmount = -1f;
+                private static int lastHideUnits = -1;
+                private static int lastGutUnits = -1;
+
+                public static void ResetHarvestVariables()
+                {
+                    previousUnmodifiedTotalTime = -1f;
+                    baseMeatTimeDiscovered = false;
+                    baseHideTimeDiscovered = false;
+                    baseGutTimeDiscovered = false;
+                    baseMeatTimePerKg = 0f;
+                    baseHideTimePerUnit = 0f;
+                    baseGutTimePerUnit = 0f;
+
+                    lastMeatAmount = -1f;
+                    lastHideUnits = -1;
+                    lastGutUnits = -1;
+
+                    Main.DebugLog("Patch_HarvestDuration: Static variables reset.");
+                }
+
+                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance, ref float __result)
+                {
+                    if (__instance == null || string.IsNullOrEmpty(__instance.name)) return;
+
+                    try
+                    {
+                        string animalType = __instance.m_BodyHarvest?.name ?? string.Empty;
+                        float currentUnmodifiedTotalTime = __result;
+
+                        if (HarvestState.logPending)
+                        {
+                            Main.DebugLog($"[DEBUG] Start Patch_HarvestDuration: {animalType}");
+                            Main.DebugLog($"[DEBUG] Current Unmodified Total Time: {currentUnmodifiedTotalTime:F2}m");
+                            Main.DebugLog($"[DEBUG] Previous Unmodified Total Time: {previousUnmodifiedTotalTime:F2}m");
+                        }
+
+                        // Preserve previous total before applying tool changes
+                        float lastRecordedTotalTime = previousUnmodifiedTotalTime;
+                        previousUnmodifiedTotalTime = currentUnmodifiedTotalTime;
+
+                        // Get current amounts
+                        float meatAmount = ConvertItemWeightToFloat(__instance.m_MenuItem_Meat.HarvestAmount);
+                        int hideUnits = __instance.m_MenuItem_Hide.HarvestUnits;
+                        int gutUnits = __instance.m_MenuItem_Gut.HarvestUnits;
+
+                        bool anyAmountChanged = false;
+                        string changedItem = null;
+
+                        if (meatAmount != lastMeatAmount)
+                        {
+                            changedItem = "Meat";
+                            anyAmountChanged = true;
+                        }
+                        else if (hideUnits != lastHideUnits)
+                        {
+                            changedItem = "Hide";
+                            anyAmountChanged = true;
+                        }
+                        else if (gutUnits != lastGutUnits)
+                        {
+                            changedItem = "Gut";
+                            anyAmountChanged = true;
+                        }
+
+                        if (HarvestState.logPending)
+                        {
+                            Main.DebugLog($"[DEBUG] Changed Item Detected: {changedItem}");
+                            Main.DebugLog($"[DEBUG] Current Amounts: Meat={meatAmount:F2}kg, Hide={hideUnits}, Gut={gutUnits}");
+                            Main.DebugLog($"[DEBUG] Last Known Amounts: Meat={lastMeatAmount:F2}kg, Hide={lastHideUnits}, Gut={lastGutUnits}");
+                        }
+
+                        // Update tracking variables
+                        lastMeatAmount = meatAmount;
+                        lastHideUnits = hideUnits;
+                        lastGutUnits = gutUnits;
+
+                        // Compute previous expected time contributions (before tool change)
+                        float previousMeatTime = baseMeatTimeDiscovered ? baseMeatTimePerKg * meatAmount : 0f;
+                        float previousHideTime = baseHideTimeDiscovered ? baseHideTimePerUnit * hideUnits : 0f;
+                        float previousGutTime = baseGutTimeDiscovered ? baseGutTimePerUnit * gutUnits : 0f;
+
+                        float previousTotalExpected = previousMeatTime + previousHideTime + previousGutTime;
+                        float remainingTimeBeforeToolChange = Math.Max(0, lastRecordedTotalTime - previousTotalExpected);
+
+                        if (HarvestState.logPending)
+                        {
+                            Main.DebugLog($"[DEBUG] Expected Time Contributions: Meat={previousMeatTime:F2}m, Hide={previousHideTime:F2}m, Gut={previousGutTime:F2}m");
+                            Main.DebugLog($"[DEBUG] Remaining Time Before Tool Change: {remainingTimeBeforeToolChange:F2}m");
+                        }
+
+                        // **Handle Tool Switch**
+                        if (HarvestState.toolChanged)
+                        {
+                            if (HarvestState.logPending)
+                                Main.DebugLog($"[DEBUG] Tool change detected.");
+
+                            if (anyAmountChanged)
+                            {
+                                if (HarvestState.logPending)
+                                    Main.DebugLog($"[DEBUG] Amount changed after tool switch. Attempting base time rediscovery.");
+
+                                // **If an amount changed, discover the actual base time for that item**
+                                if (changedItem == "Meat" && meatAmount > 0)
+                                {
+                                    baseMeatTimePerKg = (currentUnmodifiedTotalTime - remainingTimeBeforeToolChange) / meatAmount;
+                                    baseMeatTimeDiscovered = true;
+                                    Main.DebugLog($"[NEW BaseTime Discovered: Meat] Amount: {meatAmount:F2} kg, Base Time per kg: {baseMeatTimePerKg:F2} minutes.");
+                                }
+                                else if (changedItem == "Hide" && hideUnits > 0)
+                                {
+                                    baseHideTimePerUnit = (currentUnmodifiedTotalTime - remainingTimeBeforeToolChange) / hideUnits;
+                                    baseHideTimeDiscovered = true;
+                                    Main.DebugLog($"[NEW BaseTime Discovered: Hide] Units: {hideUnits}, Base Time per unit: {baseHideTimePerUnit:F2} minutes.");
+                                }
+                                else if (changedItem == "Gut" && gutUnits > 0)
+                                {
+                                    baseGutTimePerUnit = (currentUnmodifiedTotalTime - remainingTimeBeforeToolChange) / gutUnits;
+                                    baseGutTimeDiscovered = true;
+                                    Main.DebugLog($"[NEW BaseTime Discovered: Gut] Units: {gutUnits}, Base Time per unit: {baseGutTimePerUnit:F2} minutes.");
+                                }
+                            }
+                            else
+                            {
+                                // **If no amount changed, apply a global ratio adjustment**
+                                float toolRatio = currentUnmodifiedTotalTime / lastRecordedTotalTime;
+                                baseMeatTimePerKg *= toolRatio;
+                                baseHideTimePerUnit *= toolRatio;
+                                baseGutTimePerUnit *= toolRatio;
+
+                                Main.DebugLog($"[Tool Switch] {animalType}: Ratio {toolRatio:F3}");
+                            }
+
+                            HarvestState.toolChanged = false;
+                        }
+
+                        // **Apply Multipliers and Compute Adjusted Time**
+                        float meatMultiplier = GetRoundedMultiplier("Meat", animalType);
+                        float hideMultiplier = GetRoundedMultiplier("Hide", animalType);
+                        float gutMultiplier = GetRoundedMultiplier("Gut", animalType);
+
+                        float originalMeatTime = baseMeatTimeDiscovered ? meatAmount * baseMeatTimePerKg : 0f;
+                        float adjustedMeatTime = originalMeatTime * meatMultiplier;
+
+                        float originalHideTime = baseHideTimeDiscovered ? hideUnits * baseHideTimePerUnit : 0f;
+                        float adjustedHideTime = originalHideTime * hideMultiplier;
+
+                        float originalGutTime = baseGutTimeDiscovered ? gutUnits * baseGutTimePerUnit : 0f;
+                        float adjustedGutTime = originalGutTime * gutMultiplier;
+
+                        // Compute total adjusted time
+                        float totalAdjustedHarvestTime = adjustedMeatTime + adjustedHideTime + adjustedGutTime;
+
+                        // ****** ASSIGN FINAL ADJUSTED HARVEST TIME ******
+                        __result = totalAdjustedHarvestTime;
+
+                        // Log if changes were detected
+                        if (HarvestState.logPending)
+                        {
+                            string logDetails = $"{animalType}: ";
+                            logDetails += $"{meatAmount:F1}kg MEAT {originalMeatTime:F1}m -> {adjustedMeatTime:F1}m, ";
+                            logDetails += $"{hideUnits}x HIDE {originalHideTime:F1}m -> {adjustedHideTime:F1}m, ";
+                            logDetails += $"{gutUnits}x GUT {originalGutTime:F1}m -> {adjustedGutTime:F1}m, ";
+                            logDetails += $"- Total {currentUnmodifiedTotalTime:F1}m -> {totalAdjustedHarvestTime:F1}m";
+
+                            Main.DebugLog(logDetails);
+                            HarvestState.logPending = false;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MelonLogger.Error($"Error in Patch_HarvestDuration: {ex}");
+                    }
+                }
+            }
+
+
+
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnIncreaseMeatHarvest))]
             internal class Patch_OnIncreaseMeatHarvest
             {
-                static void Postfix()
+                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
                 {
-                    HarvestState.lastItemChanged = "Meat";
-                    HarvestState.pendingChange = true;
+                    if (__instance == null) return;
+
+                    HarvestState.logPending = true;
                 }
             }
 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnDecreaseMeatHarvest))]
             internal class Patch_OnDecreaseMeatHarvest
             {
-                static void Postfix()
+                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
                 {
-                    HarvestState.lastItemChanged = "Meat";
-                    HarvestState.pendingChange = true;
+                    if (__instance == null) return;
+
+                    HarvestState.logPending = true;
                 }
             }
 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnIncreaseHideHarvest))]
             internal class Patch_OnIncreaseHideHarvest
             {
-                static void Postfix()
+                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
                 {
-                    HarvestState.lastItemChanged = "Hide";
-                    HarvestState.pendingChange = true;
+                    if (__instance == null) return;
+
+                    HarvestState.logPending = true;
                 }
             }
 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnDecreaseHideHarvest))]
             internal class Patch_OnDecreaseHideHarvest
             {
-                static void Postfix()
+                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
                 {
-                    HarvestState.lastItemChanged = "Hide";
-                    HarvestState.pendingChange = true;
+                    if (__instance == null) return;
+
+                    HarvestState.logPending = true;
                 }
             }
 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnIncreaseGutHarvest))]
             internal class Patch_OnIncreaseGutHarvest
             {
-                static void Postfix()
+                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
                 {
-                    HarvestState.lastItemChanged = "Gut";
-                    HarvestState.pendingChange = true;
+                    if (__instance == null) return;
+
+                    HarvestState.logPending = true;
                 }
             }
 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnDecreaseGutHarvest))]
             internal class Patch_OnDecreaseGutHarvest
             {
-                static void Postfix()
-                {
-                    HarvestState.lastItemChanged = "Gut";
-                    HarvestState.pendingChange = true;
-                }
-            }
-
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnTabQuarterSelected))]
-            internal class Patch_OnTabQuarterSelected
-            {
                 static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
                 {
                     if (__instance == null) return;
-                    HarvestState.savedHarvestTime = __instance.m_HarvestTimeMinutes;
-                    Main.DebugLog($"OnTabQuarterSelected called. Saved harvest time: {HarvestState.savedHarvestTime:F2}");
+
+                    HarvestState.logPending = true;
                 }
             }
 
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnTabHarvestSelected))]
-            internal class Patch_OnTabHarvestSelected
-            {
-                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
-                {
-                    if (__instance == null) return;
-                    __instance.m_HarvestTimeMinutes = HarvestState.savedHarvestTime;
-                    Main.DebugLog($"OnTabHarvestSelected called. Restored harvest time: {HarvestState.savedHarvestTime:F2}");
-                }
-            }
 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnToolNext))]
             internal class Patch_OnToolNext
             {
                 static void Postfix()
                 {
-                    HarvestState.pendingChange = true;
-                    HarvestState.lastItemChanged = "ToolSwitch";
+                    HarvestState.toolChanged = true;  // Mark tool switch detected
+                    HarvestState.logPending = true;
                 }
             }
 
@@ -307,8 +408,8 @@ namespace CarcassYieldTweaker
             {
                 static void Postfix()
                 {
-                    HarvestState.pendingChange = true;
-                    HarvestState.lastItemChanged = "ToolSwitch";
+                    HarvestState.toolChanged = true;  // Mark tool switch detected
+                    HarvestState.logPending = true;
                 }
             }
 
@@ -333,7 +434,8 @@ namespace CarcassYieldTweaker
                 }
             }
 
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.Enable), new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
+            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.Enable),
+                new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
             internal class Patch_ClearHarvestSettings
             {
                 static void Prefix(Il2Cpp.Panel_BodyHarvest __instance, bool enable)
@@ -344,16 +446,27 @@ namespace CarcassYieldTweaker
                     try
                     {
                         // Clear custom state and modified harvest times
-                        Main.DebugLog("Patch_ClearHarvestSettings: Panel_BodyHarvest closed, clearing m_HarvestTimeMinutes.");
+                        Main.DebugLog("Patch_ClearHarvestSettings: Panel_BodyHarvest closed, clearing state.");
+
                         __instance.m_HarvestTimeMinutes = 0f;
-                        HarvestState.ClearAll();
+
+                        // Reset static variables in Patch_HarvestDuration
+                        Patch_HarvestDuration.ResetHarvestVariables();
                     }
                     catch (Exception ex)
-                    { 
+                    {
                         MelonLogger.Error($"Error in ClearHarvestSettings: {ex}");
                     }
                 }
             }
+
+
+        } // End of Panel_BodyHarvest_TimePatches
+
+
+
+        internal class Panel_BodyHarvest_Display_Patches
+            {
 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.Enable), new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
             internal class Patch_ClearConditionAndFrozenLabels
@@ -398,15 +511,6 @@ namespace CarcassYieldTweaker
                     }
                 }
             }
-
-
-            private static readonly UnityEngine.Color Green = new UnityEngine.Color(0, 0.808f, 0.518f, 1);
-            private static readonly UnityEngine.Color Yellow = new UnityEngine.Color(0.827f, 0.729f, 0, 1);
-            private static readonly UnityEngine.Color Orange = new UnityEngine.Color(0.827f, 0.471f, 0, 1);
-            private static readonly UnityEngine.Color Red = new UnityEngine.Color(0.639f, 0.204f, 0.231f, 1);
-            private static readonly UnityEngine.Color White = new UnityEngine.Color(1, 1, 1, 1);
-            private static readonly UnityEngine.Color Cyan = new UnityEngine.Color(0.447f, 0.765f, 0.765f, 1);
-            private static readonly UnityEngine.Color Blue = new UnityEngine.Color(0, 0.251f, 0.502f, 1);
 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.RefreshTitle))]
             public class PanelBodyHarvest_ConditionLabel_Patch
@@ -462,7 +566,7 @@ namespace CarcassYieldTweaker
                     }
                 }
             }
-            /*
+
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.RefreshTitle))]
             public class PanelBodyHarvest_FrozenLabel_Patch
             {
@@ -524,12 +628,25 @@ namespace CarcassYieldTweaker
 
                     }
                 }
-            }*/
-        } // End of Panel_BodyHarvest_Patches
+            }
+                private static string FormatTimeLog(float original, float adjusted, float multiplier)
+                {
+                    return $"{original:F1}m -> {adjusted:F1}m ({multiplier:F1}x)";
+                }
+
+                private static readonly UnityEngine.Color Green = new UnityEngine.Color(0, 0.808f, 0.518f, 1);
+                private static readonly UnityEngine.Color Yellow = new UnityEngine.Color(0.827f, 0.729f, 0, 1);
+                private static readonly UnityEngine.Color Orange = new UnityEngine.Color(0.827f, 0.471f, 0, 1);
+                private static readonly UnityEngine.Color Red = new UnityEngine.Color(0.639f, 0.204f, 0.231f, 1);
+                private static readonly UnityEngine.Color White = new UnityEngine.Color(1, 1, 1, 1);
+                private static readonly UnityEngine.Color Cyan = new UnityEngine.Color(0.447f, 0.765f, 0.765f, 1);
+                private static readonly UnityEngine.Color Blue = new UnityEngine.Color(0, 0.251f, 0.502f, 1);
+
+            } // End of Panel_BodyHarvest_TimePatches
 
 
 
-        internal static class BodyHarvest_Patches
+            internal static class BodyHarvest_Patches
         {
 
             //Quantity and Quarter time Patching
@@ -667,53 +784,6 @@ namespace CarcassYieldTweaker
 
 
 
-            //// Decay rate patching - ONLY WORKS DURING REALTIME GAMEPLAY, NOT DURING ACCELERATED TIME
-            //[HarmonyPatch(typeof(Il2Cpp.BodyHarvest), nameof(BodyHarvest.InitializeResourcesAndConditions))]
-            //internal class Patch_CarcassDecay
-            //{
-            //    //Default decay rate for every animal and carcass is 5. There must be something else on the backend that converts this into real game time.
-            //    internal static float defaultDecay = 5f;
-            //    private static void Prefix(Il2Cpp.BodyHarvest __instance)
-            //    {
-            //        if (__instance == null || string.IsNullOrEmpty(__instance.name)) return;
-            //        try
-            //        {
-            //            //ONLY WORKS DURING REALTIME GAMEPLAY, NOT DURING ACCELERATED TIME
-            //            //else
-            //            //{
-            //            //    Main.DebugLog($"{__instance.name} Orig Decay: " + __instance.m_DecayConditionPerHour);
-            //            //    if (__instance.name.StartsWith("WILDLIFE_Rabbit")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderRabbit, 2) * defaultDecay; }
-            //            //    if (__instance.name.StartsWith("WILDLIFE_Ptarmigan")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderPtarmigan, 2) * defaultDecay; }
-            //            //    if (__instance.name.StartsWith("WILDLIFE_Doe")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderDoe, 2) * defaultDecay; }
-            //            //    if (__instance.name.StartsWith("WILDLIFE_Stag")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderStag, 2) * defaultDecay; }
-            //            //    if (__instance.name.StartsWith("WILDLIFE_Moose")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderMoose, 2) * defaultDecay; }
-            //            //    if (__instance.name.StartsWith("WILDLIFE_Wolf_Starving")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderPoisonedWolf, 2) * defaultDecay; }
-            //            //    else if (__instance.name.StartsWith("WILDLIFE_Wolf_grey")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderTimberWolf, 2) * defaultDecay; }
-            //            //    else if (__instance.name.StartsWith("WILDLIFE_Wolf")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderWolf, 2) * defaultDecay; }
-            //            //    if (__instance.name.StartsWith("WILDLIFE_Bear")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderBear, 2) * defaultDecay; }
-            //            //    if (__instance.name.StartsWith("WILDLIFE_Cougar")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderCougar, 2) * defaultDecay; }
-
-            //            //    if (Settings.instance.AdjustExistingCarcasses)
-            //            //    {
-            //            //        if (__instance.name.StartsWith("CORPSE_Deer")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderStag, 2) * defaultDecay; }
-            //            //        if (__instance.name.StartsWith("CORPSE_Moose")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderMoose, 2) * defaultDecay; }
-            //            //        if (__instance.name.StartsWith("CORPSE_Wolf")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderWolf, 2) * defaultDecay; }
-            //            //        // Doesn't seem to be a CORPSE_Wolf_grey so we'll just use the WILDLIFE_Wolf_grey which seems to also be the corpse object
-            //            //        // Doesn't seem to be a CORPSE_Wolf_Starving so we'll just use the WILDLIFE_Wolf_Starving which seems to also be the corpse object
-            //            //        if (__instance.name.StartsWith("GEAR_PtarmiganCarcass")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderPtarmigan, 2) * defaultDecay; }
-            //            //        if (__instance.name.StartsWith("CORPSE_Doe")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderDoe, 2) * defaultDecay; }
-            //            //        if (__instance.name.StartsWith("CORPSE_Bear")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderBear, 2) * defaultDecay; }
-            //            //        if (__instance.name.StartsWith("CORPSE_Cougar")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderCougar, 2) * defaultDecay; }
-            //            //    }
-            //            //    Main.DebugLog($"{__instance.name}  New Decay: " + __instance.m_DecayConditionPerHour);
-            //            //}
-            //        }
-            //        catch (Exception ex)
-            //        {
-            //            MelonLogger.Error($"Error in Patch_CarcassDecay: {ex}");
-            //        }
-            //    } // End of Prefix
-            //} // End of Patch_CarcassDecay
 
 
         } // End of BodyHarvest_Patches
@@ -721,3 +791,52 @@ namespace CarcassYieldTweaker
     } // End of Patches
 
 } // End of namespace
+
+
+//// Decay rate patching - ONLY WORKS DURING REALTIME GAMEPLAY, NOT DURING ACCELERATED TIME
+//[HarmonyPatch(typeof(Il2Cpp.BodyHarvest), nameof(BodyHarvest.InitializeResourcesAndConditions))]
+//internal class Patch_CarcassDecay
+//{
+//    //Default decay rate for every animal and carcass is 5. There must be something else on the backend that converts this into real game time.
+//    internal static float defaultDecay = 5f;
+//    private static void Prefix(Il2Cpp.BodyHarvest __instance)
+//    {
+//        if (__instance == null || string.IsNullOrEmpty(__instance.name)) return;
+//        try
+//        {
+//            //ONLY WORKS DURING REALTIME GAMEPLAY, NOT DURING ACCELERATED TIME
+//            //else
+//            //{
+//            //    Main.DebugLog($"{__instance.name} Orig Decay: " + __instance.m_DecayConditionPerHour);
+//            //    if (__instance.name.StartsWith("WILDLIFE_Rabbit")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderRabbit, 2) * defaultDecay; }
+//            //    if (__instance.name.StartsWith("WILDLIFE_Ptarmigan")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderPtarmigan, 2) * defaultDecay; }
+//            //    if (__instance.name.StartsWith("WILDLIFE_Doe")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderDoe, 2) * defaultDecay; }
+//            //    if (__instance.name.StartsWith("WILDLIFE_Stag")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderStag, 2) * defaultDecay; }
+//            //    if (__instance.name.StartsWith("WILDLIFE_Moose")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderMoose, 2) * defaultDecay; }
+//            //    if (__instance.name.StartsWith("WILDLIFE_Wolf_Starving")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderPoisonedWolf, 2) * defaultDecay; }
+//            //    else if (__instance.name.StartsWith("WILDLIFE_Wolf_grey")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderTimberWolf, 2) * defaultDecay; }
+//            //    else if (__instance.name.StartsWith("WILDLIFE_Wolf")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderWolf, 2) * defaultDecay; }
+//            //    if (__instance.name.StartsWith("WILDLIFE_Bear")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderBear, 2) * defaultDecay; }
+//            //    if (__instance.name.StartsWith("WILDLIFE_Cougar")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderCougar, 2) * defaultDecay; }
+
+//            //    if (Settings.instance.AdjustExistingCarcasses)
+//            //    {
+//            //        if (__instance.name.StartsWith("CORPSE_Deer")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderStag, 2) * defaultDecay; }
+//            //        if (__instance.name.StartsWith("CORPSE_Moose")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderMoose, 2) * defaultDecay; }
+//            //        if (__instance.name.StartsWith("CORPSE_Wolf")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderWolf, 2) * defaultDecay; }
+//            //        // Doesn't seem to be a CORPSE_Wolf_grey so we'll just use the WILDLIFE_Wolf_grey which seems to also be the corpse object
+//            //        // Doesn't seem to be a CORPSE_Wolf_Starving so we'll just use the WILDLIFE_Wolf_Starving which seems to also be the corpse object
+//            //        if (__instance.name.StartsWith("GEAR_PtarmiganCarcass")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderPtarmigan, 2) * defaultDecay; }
+//            //        if (__instance.name.StartsWith("CORPSE_Doe")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderDoe, 2) * defaultDecay; }
+//            //        if (__instance.name.StartsWith("CORPSE_Bear")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderBear, 2) * defaultDecay; }
+//            //        if (__instance.name.StartsWith("CORPSE_Cougar")) { __instance.m_DecayConditionPerHour = (float)Math.Round(Settings.instance.DecayRateMultiplierSliderCougar, 2) * defaultDecay; }
+//            //    }
+//            //    Main.DebugLog($"{__instance.name}  New Decay: " + __instance.m_DecayConditionPerHour);
+//            //}
+//        }
+//        catch (Exception ex)
+//        {
+//            MelonLogger.Error($"Error in Patch_CarcassDecay: {ex}");
+//        }
+//    } // End of Prefix
+//} // End of Patch_CarcassDecay
