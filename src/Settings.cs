@@ -104,8 +104,17 @@ namespace CarcassYieldTweaker
         {
             Main.DebugLog("OnConfirm triggered.");
 
-            // Save instance only if the preset is "Custom"
-            if (preset == 3) // 3 = "Custom"
+            // If a preset is selected (not Custom), overwrite Custom settings with the preset values
+            if (preset != 3) // Not "Custom"
+            {
+                Main.DebugLog($"Updating Custom preset with {preset} values.");
+                foreach (var field in GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                {
+                    customSettingsBackup[field.Name] = field.GetValue(this);
+                    //Main.DebugLog($"Updated Custom preset: {field.Name} = {customSettingsBackup[field.Name]}");
+                }
+            }
+            else
             {
                 Main.DebugLog("Saving Custom preset instance to backup.");
                 foreach (var field in GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
