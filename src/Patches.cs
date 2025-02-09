@@ -3,9 +3,8 @@ using Il2Cpp;
 using Il2CppTLD.IntBackedUnit;
 using MelonLoader;
 using System;
+using System.Collections.Generic;
 using UnityEngine;
-using static CarcassYieldTweaker.Patches.Panel_BodyHarvest_Time_Patches;
-
 
 namespace CarcassYieldTweaker
 {
@@ -13,6 +12,7 @@ namespace CarcassYieldTweaker
     {
         internal static class HarvestState
         {
+            internal static bool panelOpened = false;
             internal static bool toolChanged = false; 
             internal static bool logPending = false;
         }
@@ -80,7 +80,7 @@ namespace CarcassYieldTweaker
                             rawMultiplier = Settings.instance.GutTimeSliderGlobal;
                         break;
 
-                    case "WILDLIFE_TimberWolf":
+                    case "WILDLIFE_Wolf_grey":
                         if (itemType == "Hide")
                             rawMultiplier = Settings.instance.HideTimeSliderTimberWolf;
                         else if (itemType == "Meat")
@@ -89,7 +89,7 @@ namespace CarcassYieldTweaker
                             rawMultiplier = Settings.instance.GutTimeSliderGlobal;
                         break;
 
-                    case "WILDLIFE_StarvingWolf":
+                    case "WILDLIFE_Wolf_Starving":
                         if (itemType == "Hide")
                             rawMultiplier = Settings.instance.HideTimeSliderPoisonedWolf;
                         else if (itemType == "Gut")
@@ -137,182 +137,404 @@ namespace CarcassYieldTweaker
             }
 
 
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.GetHarvestDurationMinutes))]
+            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.GetHarvestDurationMinutes)), HarmonyPriority(Priority.Low)]
             internal class Patch_HarvestDuration
             {
                 private static float previousUnmodifiedTotalTime = -1f;
-                private static bool baseMeatTimeDiscovered = false;
-                private static bool baseHideTimeDiscovered = false;
-                private static bool baseGutTimeDiscovered = false;
-                private static float baseMeatTimePerKg = 0f;
-                private static float baseHideTimePerUnit = 0f;
-                private static float baseGutTimePerUnit = 0f;
+                private static Dictionary<int, (float Meat, float Hide, float Gut)> toolBaseTimes = new();
+                private static Dictionary<int, (bool Meat, bool Hide, bool Gut)> toolKnownFlags = new();
+                private static float lastMeatAmount;
+                private static int lastHideUnits;
+                private static int lastGutUnits;
+                private static int previousToolIndex = -1;  // Stores the last-used tool index
 
-                private static float lastMeatAmount = -1f;
-                private static int lastHideUnits = -1;
-                private static int lastGutUnits = -1;
 
                 public static void ResetHarvestVariables()
                 {
                     previousUnmodifiedTotalTime = -1f;
-                    baseMeatTimeDiscovered = false;
-                    baseHideTimeDiscovered = false;
-                    baseGutTimeDiscovered = false;
-                    baseMeatTimePerKg = 0f;
-                    baseHideTimePerUnit = 0f;
-                    baseGutTimePerUnit = 0f;
-
+                    toolBaseTimes.Clear();
+                    toolKnownFlags.Clear();
                     lastMeatAmount = -1f;
                     lastHideUnits = -1;
                     lastGutUnits = -1;
+                    previousToolIndex = -1;
 
-                    Main.DebugLog("Patch_HarvestDuration: Static variables reset.");
+                    Main.DebugLog("[Close] Patch_HarvestDuration Static variables reset.");
                 }
 
                 static void Postfix(Il2Cpp.Panel_BodyHarvest __instance, ref float __result)
                 {
-                    if (__instance == null || string.IsNullOrEmpty(__instance.name)) return;
+                    if (__instance == null || string.IsNullOrEmpty(__instance.name))
+                    {
+                        Main.DebugLog("Panel_BodyHarvest instance is null or name is empty.");
+                        return;
+                    }
 
                     try
                     {
                         string animalType = __instance.m_BodyHarvest?.name ?? string.Empty;
+                        int toolIndex = __instance.m_SelectedToolItemIndex;
+
                         float currentUnmodifiedTotalTime = __result;
-
-                        if (HarvestState.logPending)
-                        {
-                            Main.DebugLog($"[DEBUG] Start Patch_HarvestDuration: {animalType}");
-                            Main.DebugLog($"[DEBUG] Current Unmodified Total Time: {currentUnmodifiedTotalTime:F2}m");
-                            Main.DebugLog($"[DEBUG] Previous Unmodified Total Time: {previousUnmodifiedTotalTime:F2}m");
-                        }
-
-                        // Preserve previous total before applying tool changes
                         float lastRecordedTotalTime = previousUnmodifiedTotalTime;
                         previousUnmodifiedTotalTime = currentUnmodifiedTotalTime;
 
-                        // Get current amounts
                         float meatAmount = ConvertItemWeightToFloat(__instance.m_MenuItem_Meat.HarvestAmount);
                         int hideUnits = __instance.m_MenuItem_Hide.HarvestUnits;
                         int gutUnits = __instance.m_MenuItem_Gut.HarvestUnits;
 
-                        bool anyAmountChanged = false;
-                        string changedItem = null;
-
-                        if (meatAmount != lastMeatAmount)
-                        {
-                            changedItem = "Meat";
-                            anyAmountChanged = true;
-                        }
-                        else if (hideUnits != lastHideUnits)
-                        {
-                            changedItem = "Hide";
-                            anyAmountChanged = true;
-                        }
-                        else if (gutUnits != lastGutUnits)
-                        {
-                            changedItem = "Gut";
-                            anyAmountChanged = true;
-                        }
-
-                        if (HarvestState.logPending)
-                        {
-                            Main.DebugLog($"[DEBUG] Changed Item Detected: {changedItem}");
-                            Main.DebugLog($"[DEBUG] Current Amounts: Meat={meatAmount:F2}kg, Hide={hideUnits}, Gut={gutUnits}");
-                            Main.DebugLog($"[DEBUG] Last Known Amounts: Meat={lastMeatAmount:F2}kg, Hide={lastHideUnits}, Gut={lastGutUnits}");
-                        }
-
-                        // Update tracking variables
-                        lastMeatAmount = meatAmount;
-                        lastHideUnits = hideUnits;
-                        lastGutUnits = gutUnits;
-
-                        // Compute previous expected time contributions (before tool change)
-                        float previousMeatTime = baseMeatTimeDiscovered ? baseMeatTimePerKg * meatAmount : 0f;
-                        float previousHideTime = baseHideTimeDiscovered ? baseHideTimePerUnit * hideUnits : 0f;
-                        float previousGutTime = baseGutTimeDiscovered ? baseGutTimePerUnit * gutUnits : 0f;
-
-                        float previousTotalExpected = previousMeatTime + previousHideTime + previousGutTime;
-                        float remainingTimeBeforeToolChange = Math.Max(0, lastRecordedTotalTime - previousTotalExpected);
-
-                        if (HarvestState.logPending)
-                        {
-                            Main.DebugLog($"[DEBUG] Expected Time Contributions: Meat={previousMeatTime:F2}m, Hide={previousHideTime:F2}m, Gut={previousGutTime:F2}m");
-                            Main.DebugLog($"[DEBUG] Remaining Time Before Tool Change: {remainingTimeBeforeToolChange:F2}m");
-                        }
-
-                        // **Handle Tool Switch**
-                        if (HarvestState.toolChanged)
-                        {
-                            if (HarvestState.logPending)
-                                Main.DebugLog($"[DEBUG] Tool change detected.");
-
-                            if (anyAmountChanged)
-                            {
-                                if (HarvestState.logPending)
-                                    Main.DebugLog($"[DEBUG] Amount changed after tool switch. Attempting base time rediscovery.");
-
-                                // **If an amount changed, discover the actual base time for that item**
-                                if (changedItem == "Meat" && meatAmount > 0)
-                                {
-                                    baseMeatTimePerKg = (currentUnmodifiedTotalTime - remainingTimeBeforeToolChange) / meatAmount;
-                                    baseMeatTimeDiscovered = true;
-                                    Main.DebugLog($"[NEW BaseTime Discovered: Meat] Amount: {meatAmount:F2} kg, Base Time per kg: {baseMeatTimePerKg:F2} minutes.");
-                                }
-                                else if (changedItem == "Hide" && hideUnits > 0)
-                                {
-                                    baseHideTimePerUnit = (currentUnmodifiedTotalTime - remainingTimeBeforeToolChange) / hideUnits;
-                                    baseHideTimeDiscovered = true;
-                                    Main.DebugLog($"[NEW BaseTime Discovered: Hide] Units: {hideUnits}, Base Time per unit: {baseHideTimePerUnit:F2} minutes.");
-                                }
-                                else if (changedItem == "Gut" && gutUnits > 0)
-                                {
-                                    baseGutTimePerUnit = (currentUnmodifiedTotalTime - remainingTimeBeforeToolChange) / gutUnits;
-                                    baseGutTimeDiscovered = true;
-                                    Main.DebugLog($"[NEW BaseTime Discovered: Gut] Units: {gutUnits}, Base Time per unit: {baseGutTimePerUnit:F2} minutes.");
-                                }
-                            }
-                            else
-                            {
-                                // **If no amount changed, apply a global ratio adjustment**
-                                float toolRatio = currentUnmodifiedTotalTime / lastRecordedTotalTime;
-                                baseMeatTimePerKg *= toolRatio;
-                                baseHideTimePerUnit *= toolRatio;
-                                baseGutTimePerUnit *= toolRatio;
-
-                                Main.DebugLog($"[Tool Switch] {animalType}: Ratio {toolRatio:F3}");
-                            }
-
-                            HarvestState.toolChanged = false;
-                        }
-
-                        // **Apply Multipliers and Compute Adjusted Time**
                         float meatMultiplier = GetRoundedMultiplier("Meat", animalType);
                         float hideMultiplier = GetRoundedMultiplier("Hide", animalType);
                         float gutMultiplier = GetRoundedMultiplier("Gut", animalType);
 
-                        float originalMeatTime = baseMeatTimeDiscovered ? meatAmount * baseMeatTimePerKg : 0f;
-                        float adjustedMeatTime = originalMeatTime * meatMultiplier;
+                        bool meatAmountChanged = meatAmount != lastMeatAmount;
+                        bool hideUnitsChanged = hideUnits != lastHideUnits;
+                        bool gutUnitsChanged = gutUnits != lastGutUnits;
+                        bool anyAmountChanged = meatAmountChanged || hideUnitsChanged || gutUnitsChanged;
 
-                        float originalHideTime = baseHideTimeDiscovered ? hideUnits * baseHideTimePerUnit : 0f;
-                        float adjustedHideTime = originalHideTime * hideMultiplier;
+                        if (HarvestState.panelOpened)
+                        {
+                            previousToolIndex = toolIndex;
+                            lastMeatAmount = meatAmount;
+                            lastHideUnits = hideUnits;
+                            lastGutUnits = gutUnits;
+                            toolBaseTimes[toolIndex] = (0f, 0f, 0f);
+                            toolKnownFlags[toolIndex] = (false, false, false);
+                            Main.DebugLog("[Open] -------- Panel_BodyHarvest Opened --------");
+                            Main.DebugLog($"[Initialize] Animal: {animalType}, Tool:{toolIndex}, Time Multipliers - Meat: {meatMultiplier}x, Hide: {hideMultiplier}x, Gut: {gutMultiplier}x");
+                            HarvestState.panelOpened = false;
+                            HarvestState.logPending = false;
+                        }
 
-                        float originalGutTime = baseGutTimeDiscovered ? gutUnits * baseGutTimePerUnit : 0f;
-                        float adjustedGutTime = originalGutTime * gutMultiplier;
-
-                        // Compute total adjusted time
-                        float totalAdjustedHarvestTime = adjustedMeatTime + adjustedHideTime + adjustedGutTime;
-
-                        // ****** ASSIGN FINAL ADJUSTED HARVEST TIME ******
-                        __result = totalAdjustedHarvestTime;
-
-                        // Log if changes were detected
                         if (HarvestState.logPending)
                         {
-                            string logDetails = $"{animalType}: ";
-                            logDetails += $"{meatAmount:F1}kg MEAT {originalMeatTime:F1}m -> {adjustedMeatTime:F1}m, ";
-                            logDetails += $"{hideUnits}x HIDE {originalHideTime:F1}m -> {adjustedHideTime:F1}m, ";
-                            logDetails += $"{gutUnits}x GUT {originalGutTime:F1}m -> {adjustedGutTime:F1}m, ";
-                            logDetails += $"- Total {currentUnmodifiedTotalTime:F1}m -> {totalAdjustedHarvestTime:F1}m";
+                            Main.DebugLog($"[Unmodified Times] {lastRecordedTotalTime:F2}m -> {currentUnmodifiedTotalTime:F2}m ");
+                        }
 
+
+                        if (HarvestState.toolChanged)  // ** Detect tool change **
+                        {
+                            float threeItemRatio = currentUnmodifiedTotalTime / lastRecordedTotalTime;
+                            // **Log previous and new tool index**
+                            if (HarvestState.logPending)
+                            {
+                                Main.DebugLog($"[ToolSwitch] {previousToolIndex} -> {toolIndex}");
+                            }
+
+                            // If this tool has never been seen at all, initialize it with the previous tool's base times and a 3-item scaling ratio
+                            if (!toolBaseTimes.ContainsKey(toolIndex))
+                            {
+                                if (lastRecordedTotalTime > 0)
+                                {
+                                    // Use the previous tool's base times as a starting point. Then apply the ratio of the previous tool's total time and the new tool's total time to the new tool's base times to ensure proper scaling  
+                                    toolBaseTimes[toolIndex] = (
+                                        toolBaseTimes.ContainsKey(previousToolIndex) ? toolBaseTimes[previousToolIndex].Meat * threeItemRatio : 0f,
+                                        toolBaseTimes.ContainsKey(previousToolIndex) ? toolBaseTimes[previousToolIndex].Hide * threeItemRatio : 0f,
+                                        toolBaseTimes.ContainsKey(previousToolIndex) ? toolBaseTimes[previousToolIndex].Gut * threeItemRatio : 0f
+                                    );
+
+                                    // Set the known flags to false for the new tool, since base times are only estimates
+                                    toolKnownFlags[toolIndex] = (false, false, false);
+                                    Main.DebugLog($"[ToolSwitch] BaseTime Estimation - Tool:{toolIndex} - 3-item Ratio: {threeItemRatio:F3} - " +
+                                        $"Meat: {toolBaseTimes[previousToolIndex].Meat:F2} -> {toolBaseTimes[toolIndex].Meat:F2} min/kg, " +
+                                        $"Hide: {toolBaseTimes[previousToolIndex].Hide:F2} -> {toolBaseTimes[toolIndex].Hide:F2} min/unit, " +
+                                        $"Gut: {toolBaseTimes[previousToolIndex].Gut:F2} -> {toolBaseTimes[toolIndex].Gut:F2} min/unit");
+                                }
+                                else
+                                {
+                                    // If a tool switch happens with all amounts set to 0, initialize the tool with 0 base times and unknown flags
+                                    toolBaseTimes[toolIndex] = (0f, 0f, 0f);
+                                    toolKnownFlags[toolIndex] = (false, false, false);
+                                    Main.DebugLog($"[ToolSwitch] New Tool: {toolIndex}, initialized.");
+                                }
+
+
+                            }
+
+                            // **Update the previous tool index AFTER handling the switch**
+                            previousToolIndex = toolIndex;
+                            HarvestState.toolChanged = false;
+                        }
+
+
+                        if (anyAmountChanged)
+                        {
+                            // Calculate the time difference between the last recorded total time and the current total time
+                            float deltaTime = currentUnmodifiedTotalTime - lastRecordedTotalTime;
+
+                            List<string> discoveredItems = new();
+
+                            if (meatAmountChanged && meatAmount > lastMeatAmount && !toolKnownFlags[toolIndex].Meat)
+                            {
+                                // Determine the amount of meat added
+                                float addedAmount = meatAmount - lastMeatAmount;
+                                // Calculate the base time for the meat item
+                                float baseTime = deltaTime / addedAmount;
+
+                                Main.DebugLog($"[BaseTime] Meat: {deltaTime:F2}m / {addedAmount:F2}kg = {baseTime:F2} min/kg");
+
+                                // Update the base time for the meat item
+                                toolBaseTimes[toolIndex] = (baseTime, toolBaseTimes[toolIndex].Hide, toolBaseTimes[toolIndex].Gut);
+                                // Set the meat flag to true, since we now know the base time
+                                toolKnownFlags[toolIndex] = (true, toolKnownFlags[toolIndex].Hide, toolKnownFlags[toolIndex].Gut);
+                            }
+
+                            if (hideUnitsChanged && hideUnits > lastHideUnits && !toolKnownFlags[toolIndex].Hide)
+                            {
+                                // Determine the amount of hide added
+                                float addedAmount = hideUnits - lastHideUnits;
+                                // Calculate the base time for the hide item
+                                float baseTime = deltaTime / addedAmount;
+
+                                Main.DebugLog($"[BaseTime] Hide:{deltaTime:F2}m / {addedAmount:F2} = {baseTime:F2} min/unit");
+
+                                // Update the base time for the hide item
+                                toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, baseTime, toolBaseTimes[toolIndex].Gut);
+                                // Set the hide flag to true, since we now know the base time
+                                toolKnownFlags[toolIndex] = (toolKnownFlags[toolIndex].Meat, true, toolKnownFlags[toolIndex].Gut);
+                            }
+
+                            if (gutUnitsChanged && gutUnits > lastGutUnits && !toolKnownFlags[toolIndex].Gut)
+                            {
+                                // Determine the amount of gut added
+                                float addedAmount = gutUnits - lastGutUnits;
+                                // Calculate the base time for the gut item
+                                float baseTime = deltaTime / addedAmount;
+
+                                Main.DebugLog($"[BaseTime] Gut: {deltaTime:F2}m / {addedAmount:F2} = {baseTime:F2} min/unit");
+
+                                // Update the base time for the gut item
+                                toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, toolBaseTimes[toolIndex].Hide, baseTime);
+                                // Set the gut flag to true, since we now know the base time
+                                toolKnownFlags[toolIndex] = (toolKnownFlags[toolIndex].Meat, toolKnownFlags[toolIndex].Hide, true);
+                            }
+
+
+                            int currentToolBaseTimeKnownCount = (toolKnownFlags[toolIndex].Meat ? 1 : 0) + (toolKnownFlags[toolIndex].Hide ? 1 : 0) + (toolKnownFlags[toolIndex].Gut ? 1 : 0);
+
+                            // Determine how many base times are known for the current tool
+                            int knownCount = (toolKnownFlags[toolIndex].Meat ? 1 : 0) +
+                                             (toolKnownFlags[toolIndex].Hide ? 1 : 0) +
+                                             (toolKnownFlags[toolIndex].Gut ? 1 : 0);
+
+                            // Start with all unknowns then subtract the knowns to get the unknown count
+                            int unknownCount = 3 - knownCount;
+
+                            // Calculate the contributions of confirmed items only
+                            float knownContribution = 0f;
+                            if (toolKnownFlags[toolIndex].Meat && meatAmount > 0)
+                                knownContribution += toolBaseTimes[toolIndex].Meat * meatAmount;
+                            if (toolKnownFlags[toolIndex].Hide && hideUnits > 0)
+                                knownContribution += toolBaseTimes[toolIndex].Hide * hideUnits;
+                            if (toolKnownFlags[toolIndex].Gut && gutUnits > 0)
+                                knownContribution += toolBaseTimes[toolIndex].Gut * gutUnits;
+
+                            // The remaining time that must come from the unknown items
+                            float remainingTime = currentUnmodifiedTotalTime - knownContribution;
+
+                            if (unknownCount == 2)
+                            {
+                                // For two unknown items, we want to distribute the remaining time
+                                // using the previous tool's base times for those unknown items.
+                                float previousContribution = 0f;
+                                if (!toolKnownFlags[toolIndex].Meat && meatAmount > 0 && toolBaseTimes.ContainsKey(previousToolIndex))
+                                    previousContribution += toolBaseTimes[previousToolIndex].Meat * meatAmount;
+                                if (!toolKnownFlags[toolIndex].Hide && hideUnits > 0 && toolBaseTimes.ContainsKey(previousToolIndex))
+                                    previousContribution += toolBaseTimes[previousToolIndex].Hide * hideUnits;
+                                if (!toolKnownFlags[toolIndex].Gut && gutUnits > 0 && toolBaseTimes.ContainsKey(previousToolIndex))
+                                    previousContribution += toolBaseTimes[previousToolIndex].Gut * gutUnits;
+
+                                if (previousContribution > 0)
+                                {
+                                    float newRatio = remainingTime / previousContribution;
+                                    Main.DebugLog($"[Algebraic] Total Previous Contribution for Unknown Items: {previousContribution:F2}m, New 2-Item Ratio: {newRatio:F3}");
+
+                                    // For each unknown item, update its base time using the previous tool's value scaled by newRatio.
+                                    if (!toolKnownFlags[toolIndex].Meat && meatAmount > 0)
+                                    {
+                                        float newBaseTime = toolBaseTimes[previousToolIndex].Meat * newRatio;
+                                        toolBaseTimes[toolIndex] = (newBaseTime, toolBaseTimes[toolIndex].Hide, toolBaseTimes[toolIndex].Gut);
+                                        Main.DebugLog($"[BaseTime] Meat [Algebraic Estimate] -> {newBaseTime:F2} min/kg");
+                                    }
+                                    if (!toolKnownFlags[toolIndex].Hide && hideUnits > 0)
+                                    {
+                                        float newBaseTime = toolBaseTimes[previousToolIndex].Hide * newRatio;
+                                        toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, newBaseTime, toolBaseTimes[toolIndex].Gut);
+                                        Main.DebugLog($"[BaseTime] Hide [Algebraic Estimate] -> {newBaseTime:F2} min/unit");
+                                    }
+                                    if (!toolKnownFlags[toolIndex].Gut && gutUnits > 0)
+                                    {
+                                        float newBaseTime = toolBaseTimes[previousToolIndex].Gut * newRatio;
+                                        toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, toolBaseTimes[toolIndex].Hide, newBaseTime);
+                                        Main.DebugLog($"[BaseTime] Gut [Algebraic Estimate] -> {newBaseTime:F2} min/unit");
+                                    }
+                                }
+                                else if (previousContribution == 0 && meatAmount > 0 && hideUnits > 0 && gutUnits > 0)
+                                {
+                                    Main.DebugLog("[WARNING] Total previous contribution for unknown items is zero!");
+                                }
+                            }
+                            else if (unknownCount == 1)
+                            {
+                                // If exactly one base time is unknown, assign it directly from the remaining time.
+                                if (!toolKnownFlags[toolIndex].Meat && meatAmount > 0)
+                                {
+                                    float newBaseTime = remainingTime / meatAmount;
+                                    toolBaseTimes[toolIndex] = (newBaseTime, toolBaseTimes[toolIndex].Hide, toolBaseTimes[toolIndex].Gut);
+                                    toolKnownFlags[toolIndex] = (true, toolKnownFlags[toolIndex].Hide, toolKnownFlags[toolIndex].Gut);
+                                    Main.DebugLog($"[BaseTime] Meat [Algebraic] -> {newBaseTime:F2} min/kg");
+                                }
+                                else if (!toolKnownFlags[toolIndex].Hide && hideUnits > 0)
+                                {
+                                    float newBaseTime = remainingTime / hideUnits;
+                                    toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, newBaseTime, toolBaseTimes[toolIndex].Gut);
+                                    toolKnownFlags[toolIndex] = (toolKnownFlags[toolIndex].Meat, true, toolKnownFlags[toolIndex].Gut);
+                                    Main.DebugLog($"[BaseTime] Hide [Algebraic] -> {newBaseTime:F2} min/unit");
+                                }
+                                else if (!toolKnownFlags[toolIndex].Gut && gutUnits > 0)
+                                {
+                                    float newBaseTime = remainingTime / gutUnits;
+                                    toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, toolBaseTimes[toolIndex].Hide, newBaseTime);
+                                    toolKnownFlags[toolIndex] = (toolKnownFlags[toolIndex].Meat, toolKnownFlags[toolIndex].Hide, true);
+                                    Main.DebugLog($"[BaseTime] Gut [Algebraic] -> {newBaseTime:F2} min/unit");
+                                }
+                            } 
+                        } // End of anyAmountChanged block
+                        /*                            // Algebraic Calculation for when only 1 base time is known (i.e. 2 items remain unknown)
+                                                    if (currentToolBaseTimeKnownCount == 1) // Only 1 exact base time known, fix the other two
+                                                    {
+                                                        // Sum the contribution from the known item
+                                                        float knownBaseTimeItemsCurrentToolContributions = 0f;
+                                                        bool meatIsKnown = toolKnownFlags[toolIndex].Meat;
+                                                        bool hideIsKnown = toolKnownFlags[toolIndex].Hide;
+                                                        bool gutIsKnown = toolKnownFlags[toolIndex].Gut;
+
+                                                        if (meatIsKnown && meatAmount > 0)
+                                                            knownBaseTimeItemsCurrentToolContributions += toolBaseTimes[toolIndex].Meat * meatAmount;
+                                                        if (hideIsKnown && hideUnits > 0)
+                                                            knownBaseTimeItemsCurrentToolContributions += toolBaseTimes[toolIndex].Hide * hideUnits;
+                                                        if (gutIsKnown && gutUnits > 0)
+                                                            knownBaseTimeItemsCurrentToolContributions += toolBaseTimes[toolIndex].Gut * gutUnits;
+
+                                                        // Calculate the adjusted remaining time for the unknown items
+                                                        float unknownBaseTimeItemsCurrentToolTimeContribution = currentUnmodifiedTotalTime - knownBaseTimeItemsCurrentToolContributions;
+                                                        Main.DebugLog($"[Algebraic] Known BaseTime Contribution: {knownBaseTimeItemsCurrentToolContributions:F2}m, Unknown BaseTime Contribution: {unknownBaseTimeItemsCurrentToolTimeContribution:F2}m");
+
+                                                        // Identify the unknown items and sum their previous tool contributions
+                                                        float unknownBaseTimeItemsPreviousToolContributions = 0f;
+                                                        if (!meatIsKnown && meatAmount > 0 && toolBaseTimes.ContainsKey(previousToolIndex))
+                                                            unknownBaseTimeItemsPreviousToolContributions += toolBaseTimes[previousToolIndex].Meat * meatAmount;
+                                                        if (!hideIsKnown && hideUnits > 0 && toolBaseTimes.ContainsKey(previousToolIndex))
+                                                            unknownBaseTimeItemsPreviousToolContributions += toolBaseTimes[previousToolIndex].Hide * hideUnits;
+                                                        if (!gutIsKnown && gutUnits > 0 && toolBaseTimes.ContainsKey(previousToolIndex))
+                                                            unknownBaseTimeItemsPreviousToolContributions += toolBaseTimes[previousToolIndex].Gut * gutUnits;
+
+                                                        if (unknownBaseTimeItemsPreviousToolContributions > 0)
+                                                        {
+                                                            float unknownBaseTimeItemsPreviousToCurrentToolRatio = unknownBaseTimeItemsCurrentToolTimeContribution / unknownBaseTimeItemsPreviousToolContributions;
+                                                            Main.DebugLog($"[Algebraic] Total Previous Contribution: {unknownBaseTimeItemsPreviousToolContributions:F2}m, 2-Item Ratio: {unknownBaseTimeItemsPreviousToCurrentToolRatio:F3}");
+
+                                                            // For each unknown item, update its base time using the previous tool's value scaled by the new twoItemRatio.
+                                                            if (!meatIsKnown && meatAmount > 0)
+                                                            {
+                                                                // Calculate the new base time for the meat item by scaling the previous tool's base time with the overall ratio between the previous and current tool's total time
+                                                                float newBaseTime = toolBaseTimes[previousToolIndex].Meat * unknownBaseTimeItemsPreviousToCurrentToolRatio;
+                                                                // Update the new tool base time for the meat item
+                                                                toolBaseTimes[toolIndex] = (newBaseTime, toolBaseTimes[toolIndex].Hide, toolBaseTimes[toolIndex].Gut);
+                                                                //toolKnownFlags[toolIndex] = (true, toolKnownFlags[toolIndex].Hide, toolKnownFlags[toolIndex].Gut);
+                                                                Main.DebugLog($"[BaseTime] Meat [Algebraic] -> {newBaseTime:F2} min/kg");
+                                                            }
+                                                            if (!hideIsKnown && hideUnits > 0)
+                                                            {
+                                                                // Calculate the new base time for the meat item by scaling the previous tool's base time with the overall ratio between the previous and current tool's total time
+                                                                float newBaseTime = toolBaseTimes[previousToolIndex].Hide * unknownBaseTimeItemsPreviousToCurrentToolRatio;
+                                                                // Update the new tool base time for the hide item
+                                                                toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, newBaseTime, toolBaseTimes[toolIndex].Gut);
+                                                                //toolKnownFlags[toolIndex] = (toolKnownFlags[toolIndex].Meat, true, toolKnownFlags[toolIndex].Gut);
+                                                                Main.DebugLog($"[BaseTime] Hide [Algebraic] -> {newBaseTime:F2} min/unit");
+                                                            }
+                                                            if (!gutIsKnown && gutUnits > 0)
+                                                            {
+                                                                // Calculate the new base time for the meat item by scaling the previous tool's base time with the overall ratio between the previous and current tool's total time
+                                                                float newBaseTime = toolBaseTimes[previousToolIndex].Gut * unknownBaseTimeItemsPreviousToCurrentToolRatio;
+                                                                // Update the new tool base time for the gut item
+                                                                toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, toolBaseTimes[toolIndex].Hide, newBaseTime);
+                                                                //toolKnownFlags[toolIndex] = (toolKnownFlags[toolIndex].Meat, toolKnownFlags[toolIndex].Hide, true);
+                                                                Main.DebugLog($"[BaseTime] Gut [Algebraic] -> {newBaseTime:F2} min/unit");
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            Main.DebugLog("[WARNING] Total previous contribution for unknown items is zero!");
+                                                        }
+                                                    }
+
+
+                                                    // Final Algebraic Calculation: Solve for the last unknown base time
+                                                    if (currentToolBaseTimeKnownCount == 2) // If 2 base times are known, calculate the 3rd
+                                                    {
+                                                        // Sum the contributions of the items whose base times are known.
+                                                        float knownContributions = 0f;
+                                                        if (toolKnownFlags[toolIndex].Meat && meatAmount > 0)
+                                                            knownContributions += toolBaseTimes[toolIndex].Meat * meatAmount;
+                                                        if (toolKnownFlags[toolIndex].Hide && hideUnits > 0)
+                                                            knownContributions += toolBaseTimes[toolIndex].Hide * hideUnits;
+                                                        if (toolKnownFlags[toolIndex].Gut && gutUnits > 0)
+                                                            knownContributions += toolBaseTimes[toolIndex].Gut * gutUnits;
+
+                                                        // The remaining time to be allocated to the unknown item is the total minus the known contributions.
+                                                        float remainingTime = currentUnmodifiedTotalTime - knownContributions;
+
+                                                        // Now, update only the unknown item's base time.
+                                                        if (!toolKnownFlags[toolIndex].Meat && meatAmount > 0)
+                                                        {
+                                                            toolBaseTimes[toolIndex] = (remainingTime / meatAmount, toolBaseTimes[toolIndex].Hide, toolBaseTimes[toolIndex].Gut);
+                                                            toolKnownFlags[toolIndex] = (true, toolKnownFlags[toolIndex].Hide, toolKnownFlags[toolIndex].Gut);
+                                                            Main.DebugLog($"[BaseTime] Meat [Algebraic] -> {toolBaseTimes[toolIndex].Meat:F2} min/kg");
+                                                        }
+                                                        else if (!toolKnownFlags[toolIndex].Hide && hideUnits > 0)
+                                                        {
+                                                            toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, remainingTime / hideUnits, toolBaseTimes[toolIndex].Gut);
+                                                            toolKnownFlags[toolIndex] = (toolKnownFlags[toolIndex].Meat, true, toolKnownFlags[toolIndex].Gut);
+                                                            Main.DebugLog($"[BaseTime] Hide [Algebraic] -> {toolBaseTimes[toolIndex].Hide:F2} min/unit");
+                                                        }
+                                                        else if (!toolKnownFlags[toolIndex].Gut && gutUnits > 0)
+                                                        {
+                                                            toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, toolBaseTimes[toolIndex].Hide, remainingTime / gutUnits);
+                                                            toolKnownFlags[toolIndex] = (toolKnownFlags[toolIndex].Meat, toolKnownFlags[toolIndex].Hide, true);
+                                                            Main.DebugLog($"[BaseTime] Gut [Algebraic] -> {toolBaseTimes[toolIndex].Gut:F2} min/unit");
+                                                        }
+                                                    }
+                                                }
+                        */
+
+
+
+                        lastMeatAmount = meatAmount;
+                        lastHideUnits = hideUnits;
+                        lastGutUnits = gutUnits;
+
+                        float originalMeatTime = meatAmount * toolBaseTimes[toolIndex].Meat;
+                        float originalHideTime = hideUnits * toolBaseTimes[toolIndex].Hide;
+                        float originalGutTime = gutUnits * toolBaseTimes[toolIndex].Gut;
+
+                        float adjustedMeatTime = originalMeatTime * meatMultiplier;
+                        float adjustedHideTime = originalHideTime * hideMultiplier;
+                        float adjustedGutTime = originalGutTime * gutMultiplier;
+
+                        float totalAdjustedHarvestTime = adjustedMeatTime + adjustedHideTime + adjustedGutTime;
+                        float totalUnadjustedHarvestTime = originalMeatTime + originalHideTime + originalGutTime;
+
+                        __result = totalAdjustedHarvestTime;
+
+                        if (HarvestState.logPending)
+                        {
+                            string logDetails = $"Tool: {toolIndex} - ";
+                            logDetails += $"{meatAmount:F1}kg Meat {originalMeatTime:F1}m -> {adjustedMeatTime:F1}m ({meatMultiplier:F2}x), ";
+                            logDetails += $"{hideUnits}x Hide {originalHideTime:F1}m -> {adjustedHideTime:F1}m ({hideMultiplier:F2}x), ";
+                            logDetails += $"{gutUnits}x Gut {originalGutTime:F1}m -> {adjustedGutTime:F1}m ({gutMultiplier:F2}x), ";
+                            logDetails += $"- Total {totalUnadjustedHarvestTime:F1}m -> {totalAdjustedHarvestTime:F1}m ";
+                            logDetails += $"({(totalUnadjustedHarvestTime > 0 ? (float.IsNaN(totalAdjustedHarvestTime / totalUnadjustedHarvestTime) ? 0f : totalAdjustedHarvestTime / totalUnadjustedHarvestTime) : 0f):F2}x)";
                             Main.DebugLog(logDetails);
                             HarvestState.logPending = false;
                         }
@@ -323,7 +545,6 @@ namespace CarcassYieldTweaker
                     }
                 }
             }
-
 
 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnIncreaseMeatHarvest))]
@@ -422,7 +643,7 @@ namespace CarcassYieldTweaker
                     if (!enable || __instance == null) return;// Exit if panel is closing or if null
                     try
                     {
-                        Main.DebugLog("Panel_BodyHarvest opened.");
+                        HarvestState.panelOpened = true;  // Mark log pending for initial values
                         // Override the max harvest time if the global setting is not the default value
                         if (__instance.m_MaxTimeHours != Settings.instance.MaxHarvestTimeSliderGlobal)
                         {
@@ -489,7 +710,7 @@ namespace CarcassYieldTweaker
                                 if (conditionLabel != null)
                                 {
                                     UnityEngine.Object.Destroy(conditionLabel.gameObject);
-                                    Main.DebugLog("Patch_ClearConditionAndFrozenLabels: Panel_BodyHarvest Closed. Clearing ConditionLabel.");
+                                    Main.DebugLog("[Close] Patch_ClearConditionAndFrozenLabels: ConditionLabel Cleared");
                                 }
                             }
 
@@ -500,7 +721,7 @@ namespace CarcassYieldTweaker
                                 if (customFrozenLabel != null)
                                 {
                                     UnityEngine.Object.Destroy(customFrozenLabel.gameObject);
-                                    Main.DebugLog("Patch_ClearConditionAndFrozenLabels: Panel_BodyHarvest Closed. Clearing CustomFrozenLabel.");
+                                    Main.DebugLog("[Close] Patch_ClearConditionAndFrozenLabels: CustomFrozenLabel Cleared");
                                 }
                             }
                         }
@@ -650,7 +871,7 @@ namespace CarcassYieldTweaker
         {
 
             //Quantity and Quarter time Patching
-            [HarmonyPatch(typeof(Il2Cpp.BodyHarvest), nameof(BodyHarvest.InitializeResourcesAndConditions))]
+            [HarmonyPatch(typeof(Il2Cpp.BodyHarvest), nameof(BodyHarvest.InitializeResourcesAndConditions)), HarmonyPriority(Priority.Low)]
             internal class Patch_HarvestQuantities
             {
                 private static void Prefix(Il2Cpp.BodyHarvest __instance)
@@ -658,7 +879,7 @@ namespace CarcassYieldTweaker
                     if (__instance == null || string.IsNullOrEmpty(__instance.name)) return;
                     try
                     {
-                        //Main.DebugLog($"{__instance.name} Original fat ratio: " + __instance.m_FatToMeatRatio);
+                        //Main.DebugLog($"{__instance.name} Original fat threeItemRatio: " + __instance.m_FatToMeatRatio);
                         if (__instance.name.StartsWith("WILDLIFE_Rabbit"))
                         {
                             __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMinRabbit, 1));
@@ -758,7 +979,7 @@ namespace CarcassYieldTweaker
                             __instance.m_FatToMeatRatio = Settings.instance.FatToMeatPercentSliderCougar / 100f;
                         }
 
-                        //Main.DebugLog($"{__instance.name} New fat ratio: " + __instance.m_FatToMeatRatio);
+                        //Main.DebugLog($"{__instance.name} New fat threeItemRatio: " + __instance.m_FatToMeatRatio);
 
                     }
                     catch (Exception ex)
