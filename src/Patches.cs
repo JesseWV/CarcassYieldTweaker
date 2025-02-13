@@ -3,528 +3,192 @@ using Il2Cpp;
 using Il2CppTLD.IntBackedUnit;
 using MelonLoader;
 using System;
-using System.Collections.Generic;
 using UnityEngine;
+using System.Reflection;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace CarcassYieldTweaker
 {
     internal static class Patches
     {
-        internal static class HarvestState
-        {
-            internal static bool panelOpened = false;
-            internal static bool toolChanged = false; 
-            internal static bool logPending = false;
-        }
 
         internal static class Panel_BodyHarvest_Time_Patches
         {
 
+
+            // Helper method to retrieve the rounded multiplier based on the item type and animal type
             private static float GetRoundedMultiplier(string itemType, string animalType)
             {
-                float rawMultiplier = 1f;  // Default multiplier
+                float rawMultiplier = 1f; // Default multiplier
 
-                // Use a switch statement for each animal type and item type
-                switch (animalType)
+                // Dictionary for animal-specific Hide multipliers
+                var animalHideMultipliers = new Dictionary<string, float>
                 {
-                    case "GEAR_RabbitCarcass":
-                        if (itemType == "Hide")
-                            rawMultiplier = Settings.instance.HideTimeSliderRabbit;
-                        else if (itemType == "Meat")
-                            rawMultiplier = Settings.instance.MeatTimeSliderGlobal;
-                        else if (itemType == "Gut")
-                            rawMultiplier = Settings.instance.GutTimeSliderGlobal;
-                        break;
+                    { "GEAR_RabbitCarcass", Settings.instance.HideTimeSliderRabbit },
+                    { "GEAR_PtarmiganCarcass", Settings.instance.HideTimeSliderPtarmigan },
+                    { "WILDLIFE_Doe", Settings.instance.HideTimeSliderDoe },
+                    { "WILDLIFE_Stag", Settings.instance.HideTimeSliderStag },
+                    { "WILDLIFE_Moose", Settings.instance.HideTimeSliderMoose },
+                    { "WILDLIFE_Wolf", Settings.instance.HideTimeSliderWolf },
+                    { "WILDLIFE_Wolf_grey", Settings.instance.HideTimeSliderTimberWolf },
+                    { "WILDLIFE_Wolf_Starving", Settings.instance.HideTimeSliderPoisonedWolf },
+                    { "WILDLIFE_Bear", Settings.instance.HideTimeSliderBear },
+                    { "WILDLIFE_Cougar", Settings.instance.HideTimeSliderCougar }
+                };
 
-                    case "GEAR_PtarmiganCarcass":
-                        if (itemType == "Hide")
-                            rawMultiplier = Settings.instance.HideTimeSliderPtarmigan;
-                        else if (itemType == "Meat")
-                            rawMultiplier = Settings.instance.MeatTimeSliderGlobal;
-                        break;
+                // Default to global multipliers for Meat, FrozenMeat, and Gut - can be expanded by adding additional dictionaries if needed
+                var globalMultipliers = new Dictionary<string, float>
+                {
+                    { "Meat", Settings.instance.MeatTimeSliderGlobal },
+                    { "FrozenMeat", Settings.instance.FrozenMeatTimeSliderGlobal },
+                    { "Gut", Settings.instance.GutTimeSliderGlobal }
+                };
 
-                    case "WILDLIFE_Doe":
-                        if (itemType == "Hide")
-                            rawMultiplier = Settings.instance.HideTimeSliderDoe;
-                        else if (itemType == "Meat")
-                            rawMultiplier = Settings.instance.MeatTimeSliderGlobal;
-                        else if (itemType == "Gut")
-                            rawMultiplier = Settings.instance.GutTimeSliderGlobal;
-                        break;
-
-                    case "WILDLIFE_Stag":
-                        if (itemType == "Hide")
-                            rawMultiplier = Settings.instance.HideTimeSliderStag;
-                        else if (itemType == "Meat")
-                            rawMultiplier = Settings.instance.MeatTimeSliderGlobal;
-                        else if (itemType == "Gut")
-                            rawMultiplier = Settings.instance.GutTimeSliderGlobal;
-                        break;
-
-
-                    case "WILDLIFE_Moose":
-                        if (itemType == "Hide")
-                            rawMultiplier = Settings.instance.HideTimeSliderMoose;
-                        else if (itemType == "Meat")
-                            rawMultiplier = Settings.instance.MeatTimeSliderGlobal;
-                        else if (itemType == "Gut")
-                            rawMultiplier = Settings.instance.GutTimeSliderGlobal;
-                        break;
-
-                    case "WILDLIFE_Wolf":
-                        if (itemType == "Hide")
-                            rawMultiplier = Settings.instance.HideTimeSliderWolf;
-                        else if (itemType == "Meat")
-                            rawMultiplier = Settings.instance.MeatTimeSliderGlobal;
-                        else if (itemType == "Gut")
-                            rawMultiplier = Settings.instance.GutTimeSliderGlobal;
-                        break;
-
-                    case "WILDLIFE_Wolf_grey":
-                        if (itemType == "Hide")
-                            rawMultiplier = Settings.instance.HideTimeSliderTimberWolf;
-                        else if (itemType == "Meat")
-                            rawMultiplier = Settings.instance.MeatTimeSliderGlobal;
-                        else if (itemType == "Gut")
-                            rawMultiplier = Settings.instance.GutTimeSliderGlobal;
-                        break;
-
-                    case "WILDLIFE_Wolf_Starving":
-                        if (itemType == "Hide")
-                            rawMultiplier = Settings.instance.HideTimeSliderPoisonedWolf;
-                        else if (itemType == "Gut")
-                            rawMultiplier = Settings.instance.GutTimeSliderGlobal;
-                        break;
-
-                    case "WILDLIFE_Bear":
-                        if (itemType == "Hide")
-                            rawMultiplier = Settings.instance.HideTimeSliderBear;
-                        else if (itemType == "Meat")
-                            rawMultiplier = Settings.instance.MeatTimeSliderGlobal;
-                        else if (itemType == "Gut")
-                            rawMultiplier = Settings.instance.GutTimeSliderGlobal;
-                        break;
-
-                    case "WILDLIFE_Cougar":
-                        if (itemType == "Hide")
-                            rawMultiplier = Settings.instance.HideTimeSliderCougar;
-                        else if (itemType == "Meat")
-                            rawMultiplier = Settings.instance.MeatTimeSliderGlobal;
-                        else if (itemType == "Gut")
-                            rawMultiplier = Settings.instance.GutTimeSliderGlobal;
-                        break;
-
-                    default:
-                        // Fallback to global multipliers if animal type not found
-                        if (itemType == "Hide")
-                            rawMultiplier = 1.0f;
-                        else if (itemType == "Meat")
-                            rawMultiplier = Settings.instance.MeatTimeSliderGlobal;
-                        else if (itemType == "FrozenMeat")
-                            rawMultiplier = Settings.instance.FrozenMeatTimeSliderGlobal;
-                        else if (itemType == "Gut")
-                            rawMultiplier = Settings.instance.GutTimeSliderGlobal;
-                        Main.DebugLog($"[UNKNOWN:{animalType}] GLOBAL multiplier: {rawMultiplier:F2}");
-                        break;
+                // Determine the multiplier based on item type
+                if (itemType == "Hide")
+                {
+                    if (!animalHideMultipliers.TryGetValue(animalType, out rawMultiplier))
+                    {
+                        rawMultiplier = 1.0f; // Default for unknown animals
+                        Main.DebugLog($"[UNKNOWN ANIMAL!: {animalType}] Using default Hide multiplier: {rawMultiplier:F2}");
+                    }
+                }
+                else if (globalMultipliers.TryGetValue(itemType, out float globalMultiplier))
+                {
+                    rawMultiplier = globalMultiplier;
+                }
+                else
+                {
+                    Main.DebugLog($"[UNKNOWN ITEM TYPE!: {itemType}] Defaulting to 1.0x");
                 }
 
                 return (float)Math.Round(rawMultiplier, 2);
             }
-            internal static float ConvertItemWeightToFloat(Il2CppTLD.IntBackedUnit.ItemWeight itemWeight)
+
+
+            // Generic function to retrieve a field value using reflection
+            private static T GetFieldValue<T>(Il2Cpp.BodyHarvestItem item, string methodName)
             {
-                // Convert the scaled value in m_Units to a float in kilograms
-                return (float)itemWeight.m_Units / 1_000_000_000f;
+                var getter = item.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                return getter != null ? (T)getter.Invoke(item, null) : default;
+            }
+
+            // Generic function to modify a field value using reflection
+            private static void ModifyFieldValue(Il2Cpp.BodyHarvestItem item, string methodName, float newValue)
+            {
+                var setter = item.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                setter?.Invoke(item, new object[] { newValue });
             }
 
 
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.GetHarvestDurationMinutes)), HarmonyPriority(Priority.Low)]
-            internal class Patch_HarvestDuration
+            // Store original values to reset them later
+            private static Dictionary<Il2Cpp.BodyHarvestItem, (float meat, float frozenMeat, float gut, float hide)> originalValues =
+                new Dictionary<Il2Cpp.BodyHarvestItem, (float, float, float, float)>();
+
+
+            // ********************** Patch to change the harvest times for each item type based on the animal type ****************************
+            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Il2Cpp.Panel_BodyHarvest.Enable),
+                new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
+            internal class Patch_BodyHarvestItems
             {
-                private static float previousUnmodifiedTotalTime = -1f;
-                private static Dictionary<int, (float Meat, float Hide, float Gut)> toolBaseTimes = new();
-                private static Dictionary<int, (bool Meat, bool Hide, bool Gut)> toolKnownFlags = new();
-                private static float lastMeatAmount;
-                private static int lastHideUnits;
-                private static int lastGutUnits;
-                private static int previousToolIndex = -1;  // Stores the last-used tool index
-
-
-                public static void ResetHarvestVariables()
+                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance, bool enable)
                 {
-                    previousUnmodifiedTotalTime = -1f;
-                    toolBaseTimes.Clear();
-                    toolKnownFlags.Clear();
-                    lastMeatAmount = -1f;
-                    lastHideUnits = -1;
-                    lastGutUnits = -1;
-                    previousToolIndex = -1;
-
-                    Main.DebugLog("[Close] Patch_HarvestDuration Static variables reset.");
-                }
-
-                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance, ref float __result)
-                {
-                    if (__instance == null || string.IsNullOrEmpty(__instance.name))
-                    {
-                        Main.DebugLog("Panel_BodyHarvest instance is null or name is empty.");
-                        return;
-                    }
-
+                    if (!enable || __instance == null) return;
                     try
                     {
+                        if (__instance.m_BodyHarvest == null)
+                        {
+                            MelonLoader.MelonLogger.Error("[HarvestItems] m_BodyHarvest is null, skipping patch.");
+                            return;
+                        }
+
                         string animalType = __instance.m_BodyHarvest?.name ?? string.Empty;
-                        int toolIndex = __instance.m_SelectedToolItemIndex;
-
-                        float currentUnmodifiedTotalTime = __result;
-                        float lastRecordedTotalTime = previousUnmodifiedTotalTime;
-                        previousUnmodifiedTotalTime = currentUnmodifiedTotalTime;
-
-                        float meatAmount = ConvertItemWeightToFloat(__instance.m_MenuItem_Meat.HarvestAmount);
-                        int hideUnits = __instance.m_MenuItem_Hide.HarvestUnits;
-                        int gutUnits = __instance.m_MenuItem_Gut.HarvestUnits;
+                        var items = UnityEngine.Resources.FindObjectsOfTypeAll<Il2Cpp.BodyHarvestItem>();
 
                         float meatMultiplier = GetRoundedMultiplier("Meat", animalType);
-                        float hideMultiplier = GetRoundedMultiplier("Hide", animalType);
+                        float frozenMeatMultiplier = GetRoundedMultiplier("FrozenMeat", animalType);
                         float gutMultiplier = GetRoundedMultiplier("Gut", animalType);
+                        float hideMultiplier = GetRoundedMultiplier("Hide", animalType);
 
-                        bool meatAmountChanged = meatAmount != lastMeatAmount;
-                        bool hideUnitsChanged = hideUnits != lastHideUnits;
-                        bool gutUnitsChanged = gutUnits != lastGutUnits;
-                        bool anyAmountChanged = meatAmountChanged || hideUnitsChanged || gutUnitsChanged;
+                        Main.DebugLog($"[HarvestItems] Animal: {animalType}, Tools: {items.Count} ");
 
-                        if (HarvestState.panelOpened)
+                        foreach (var item in items)
                         {
-                            previousToolIndex = toolIndex;
-                            lastMeatAmount = meatAmount;
-                            lastHideUnits = hideUnits;
-                            lastGutUnits = gutUnits;
-                            toolBaseTimes[toolIndex] = (0f, 0f, 0f);
-                            toolKnownFlags[toolIndex] = (false, false, false);
-                            Main.DebugLog("[Open] -------- Panel_BodyHarvest Opened --------");
-                            Main.DebugLog($"[Initialize] Animal: {animalType}, Tool:{toolIndex}, Time Multipliers - Meat: {meatMultiplier}x, Hide: {hideMultiplier}x, Gut: {gutMultiplier}x");
-                            HarvestState.panelOpened = false;
-                            HarvestState.logPending = false;
-                        }
-
-                        if (HarvestState.logPending)
-                        {
-                            Main.DebugLog($"[Unmodified Times] {lastRecordedTotalTime:F2}m -> {currentUnmodifiedTotalTime:F2}m ");
-                        }
-
-
-                        if (HarvestState.toolChanged)  // ** Detect tool change **
-                        {
-                            float threeItemRatio = currentUnmodifiedTotalTime / lastRecordedTotalTime;
-                            // **Log previous and new tool index**
-                            if (HarvestState.logPending)
+                            // --- Store Original Values Before Modifying ---
+                            if (!originalValues.ContainsKey(item))
                             {
-                                Main.DebugLog($"[ToolSwitch] {previousToolIndex} -> {toolIndex}");
+                                originalValues[item] = (
+                                    GetFieldValue<float>(item, "get_m_HarvestMeatMinutesPerKG"),
+                                    GetFieldValue<float>(item, "get_m_HarvestFrozenMeatMinutesPerKG"),
+                                    GetFieldValue<float>(item, "get_m_HarvestGutMinutesPerUnit"),
+                                    GetFieldValue<float>(item, "get_m_HarvestHideMinutesPerUnit")
+                                );
                             }
 
-                            // If this tool has never been seen at all, initialize it with the previous tool's base times and a 3-item scaling ratio
-                            if (!toolBaseTimes.ContainsKey(toolIndex))
-                            {
-                                if (lastRecordedTotalTime > 0)
-                                {
-                                    // Use the previous tool's base times as a starting point. Then apply the ratio of the previous tool's total time and the new tool's total time to the new tool's base times to ensure proper scaling  
-                                    toolBaseTimes[toolIndex] = (
-                                        toolBaseTimes.ContainsKey(previousToolIndex) ? toolBaseTimes[previousToolIndex].Meat * threeItemRatio : 0f,
-                                        toolBaseTimes.ContainsKey(previousToolIndex) ? toolBaseTimes[previousToolIndex].Hide * threeItemRatio : 0f,
-                                        toolBaseTimes.ContainsKey(previousToolIndex) ? toolBaseTimes[previousToolIndex].Gut * threeItemRatio : 0f
-                                    );
+                            // --- Update Harvest Times ---
+                            ModifyFieldValue(item, "set_m_HarvestMeatMinutesPerKG", originalValues[item].meat * meatMultiplier);
+                            ModifyFieldValue(item, "set_m_HarvestFrozenMeatMinutesPerKG", originalValues[item].frozenMeat * frozenMeatMultiplier);
+                            ModifyFieldValue(item, "set_m_HarvestGutMinutesPerUnit", originalValues[item].gut * gutMultiplier);
+                            ModifyFieldValue(item, "set_m_HarvestHideMinutesPerUnit", originalValues[item].hide * hideMultiplier);
 
-                                    // Set the known flags to false for the new tool, since base times are only estimates
-                                    toolKnownFlags[toolIndex] = (false, false, false);
-                                    Main.DebugLog($"[ToolSwitch] BaseTime Estimation - Tool:{toolIndex} - 3-item Ratio: {threeItemRatio:F3} - " +
-                                        $"Meat: {toolBaseTimes[previousToolIndex].Meat:F2} -> {toolBaseTimes[toolIndex].Meat:F2} min/kg, " +
-                                        $"Hide: {toolBaseTimes[previousToolIndex].Hide:F2} -> {toolBaseTimes[toolIndex].Hide:F2} min/unit, " +
-                                        $"Gut: {toolBaseTimes[previousToolIndex].Gut:F2} -> {toolBaseTimes[toolIndex].Gut:F2} min/unit");
-                                }
-                                else
-                                {
-                                    // If a tool switch happens with all amounts set to 0, initialize the tool with 0 base times and unknown flags
-                                    toolBaseTimes[toolIndex] = (0f, 0f, 0f);
-                                    toolKnownFlags[toolIndex] = (false, false, false);
-                                    Main.DebugLog($"[ToolSwitch] New Tool: {toolIndex}, initialized.");
-                                }
-
-
-                            }
-
-                            // **Update the previous tool index AFTER handling the switch**
-                            previousToolIndex = toolIndex;
-                            HarvestState.toolChanged = false;
-                        }
-
-
-                        if (anyAmountChanged)
-                        {
-                            // Calculate the time difference between the last recorded total time and the current total time
-                            float deltaTime = currentUnmodifiedTotalTime - lastRecordedTotalTime;
-
-                            List<string> discoveredItems = new();
-
-                            if (meatAmountChanged && meatAmount > lastMeatAmount && !toolKnownFlags[toolIndex].Meat)
-                            {
-                                // Determine the amount of meat added
-                                float addedAmount = meatAmount - lastMeatAmount;
-                                // Calculate the base time for the meat item
-                                float baseTime = deltaTime / addedAmount;
-
-                                Main.DebugLog($"[BaseTime] Meat: {deltaTime:F2}m / {addedAmount:F2}kg = {baseTime:F2} min/kg");
-
-                                // Update the base time for the meat item
-                                toolBaseTimes[toolIndex] = (baseTime, toolBaseTimes[toolIndex].Hide, toolBaseTimes[toolIndex].Gut);
-                                // Set the meat flag to true, since we now know the base time
-                                toolKnownFlags[toolIndex] = (true, toolKnownFlags[toolIndex].Hide, toolKnownFlags[toolIndex].Gut);
-                            }
-
-                            if (hideUnitsChanged && hideUnits > lastHideUnits && !toolKnownFlags[toolIndex].Hide)
-                            {
-                                // Determine the amount of hide added
-                                float addedAmount = hideUnits - lastHideUnits;
-                                // Calculate the base time for the hide item
-                                float baseTime = deltaTime / addedAmount;
-
-                                Main.DebugLog($"[BaseTime] Hide:{deltaTime:F2}m / {addedAmount:F2} = {baseTime:F2} min/unit");
-
-                                // Update the base time for the hide item
-                                toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, baseTime, toolBaseTimes[toolIndex].Gut);
-                                // Set the hide flag to true, since we now know the base time
-                                toolKnownFlags[toolIndex] = (toolKnownFlags[toolIndex].Meat, true, toolKnownFlags[toolIndex].Gut);
-                            }
-
-                            if (gutUnitsChanged && gutUnits > lastGutUnits && !toolKnownFlags[toolIndex].Gut)
-                            {
-                                // Determine the amount of gut added
-                                float addedAmount = gutUnits - lastGutUnits;
-                                // Calculate the base time for the gut item
-                                float baseTime = deltaTime / addedAmount;
-
-                                Main.DebugLog($"[BaseTime] Gut: {deltaTime:F2}m / {addedAmount:F2} = {baseTime:F2} min/unit");
-
-                                // Update the base time for the gut item
-                                toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, toolBaseTimes[toolIndex].Hide, baseTime);
-                                // Set the gut flag to true, since we now know the base time
-                                toolKnownFlags[toolIndex] = (toolKnownFlags[toolIndex].Meat, toolKnownFlags[toolIndex].Hide, true);
-                            }
-
-
-                            int currentToolBaseTimeKnownCount = (toolKnownFlags[toolIndex].Meat ? 1 : 0) + (toolKnownFlags[toolIndex].Hide ? 1 : 0) + (toolKnownFlags[toolIndex].Gut ? 1 : 0);
-
-                            // Determine how many base times are known for the current tool
-                            int knownCount = (toolKnownFlags[toolIndex].Meat ? 1 : 0) +
-                                             (toolKnownFlags[toolIndex].Hide ? 1 : 0) +
-                                             (toolKnownFlags[toolIndex].Gut ? 1 : 0);
-
-                            // Start with all unknowns then subtract the knowns to get the unknown count
-                            int unknownCount = 3 - knownCount;
-
-                            // Calculate the contributions of confirmed items only
-                            float knownContribution = 0f;
-                            if (toolKnownFlags[toolIndex].Meat && meatAmount > 0)
-                                knownContribution += toolBaseTimes[toolIndex].Meat * meatAmount;
-                            if (toolKnownFlags[toolIndex].Hide && hideUnits > 0)
-                                knownContribution += toolBaseTimes[toolIndex].Hide * hideUnits;
-                            if (toolKnownFlags[toolIndex].Gut && gutUnits > 0)
-                                knownContribution += toolBaseTimes[toolIndex].Gut * gutUnits;
-
-                            // The remaining time that must come from the unknown items
-                            float remainingTime = currentUnmodifiedTotalTime - knownContribution;
-
-                            if (unknownCount == 2)
-                            {
-                                // For two unknown items, we want to distribute the remaining time
-                                // using the previous tool's base times for those unknown items.
-                                float previousContribution = 0f;
-                                if (!toolKnownFlags[toolIndex].Meat && meatAmount > 0 && toolBaseTimes.ContainsKey(previousToolIndex))
-                                    previousContribution += toolBaseTimes[previousToolIndex].Meat * meatAmount;
-                                if (!toolKnownFlags[toolIndex].Hide && hideUnits > 0 && toolBaseTimes.ContainsKey(previousToolIndex))
-                                    previousContribution += toolBaseTimes[previousToolIndex].Hide * hideUnits;
-                                if (!toolKnownFlags[toolIndex].Gut && gutUnits > 0 && toolBaseTimes.ContainsKey(previousToolIndex))
-                                    previousContribution += toolBaseTimes[previousToolIndex].Gut * gutUnits;
-
-                                if (previousContribution > 0)
-                                {
-                                    float newRatio = remainingTime / previousContribution;
-                                    Main.DebugLog($"[Algebraic] Total Previous Contribution for Unknown Items: {previousContribution:F2}m, New 2-Item Ratio: {newRatio:F3}");
-
-                                    // For each unknown item, update its base time using the previous tool's value scaled by newRatio.
-                                    if (!toolKnownFlags[toolIndex].Meat && meatAmount > 0)
-                                    {
-                                        float newBaseTime = toolBaseTimes[previousToolIndex].Meat * newRatio;
-                                        toolBaseTimes[toolIndex] = (newBaseTime, toolBaseTimes[toolIndex].Hide, toolBaseTimes[toolIndex].Gut);
-                                        Main.DebugLog($"[BaseTime] Meat [Algebraic Estimate] -> {newBaseTime:F2} min/kg");
-                                    }
-                                    if (!toolKnownFlags[toolIndex].Hide && hideUnits > 0)
-                                    {
-                                        float newBaseTime = toolBaseTimes[previousToolIndex].Hide * newRatio;
-                                        toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, newBaseTime, toolBaseTimes[toolIndex].Gut);
-                                        Main.DebugLog($"[BaseTime] Hide [Algebraic Estimate] -> {newBaseTime:F2} min/unit");
-                                    }
-                                    if (!toolKnownFlags[toolIndex].Gut && gutUnits > 0)
-                                    {
-                                        float newBaseTime = toolBaseTimes[previousToolIndex].Gut * newRatio;
-                                        toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, toolBaseTimes[toolIndex].Hide, newBaseTime);
-                                        Main.DebugLog($"[BaseTime] Gut [Algebraic Estimate] -> {newBaseTime:F2} min/unit");
-                                    }
-                                }
-                                else if (previousContribution == 0 && meatAmount > 0 && hideUnits > 0 && gutUnits > 0)
-                                {
-                                    Main.DebugLog("[WARNING] Total previous contribution for unknown items is zero!");
-                                }
-                            }
-                            else if (unknownCount == 1)
-                            {
-                                // If exactly one base time is unknown, assign it directly from the remaining time.
-                                if (!toolKnownFlags[toolIndex].Meat && meatAmount > 0)
-                                {
-                                    float newBaseTime = remainingTime / meatAmount;
-                                    toolBaseTimes[toolIndex] = (newBaseTime, toolBaseTimes[toolIndex].Hide, toolBaseTimes[toolIndex].Gut);
-                                    toolKnownFlags[toolIndex] = (true, toolKnownFlags[toolIndex].Hide, toolKnownFlags[toolIndex].Gut);
-                                    Main.DebugLog($"[BaseTime] Meat [Algebraic] -> {newBaseTime:F2} min/kg");
-                                }
-                                else if (!toolKnownFlags[toolIndex].Hide && hideUnits > 0)
-                                {
-                                    float newBaseTime = remainingTime / hideUnits;
-                                    toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, newBaseTime, toolBaseTimes[toolIndex].Gut);
-                                    toolKnownFlags[toolIndex] = (toolKnownFlags[toolIndex].Meat, true, toolKnownFlags[toolIndex].Gut);
-                                    Main.DebugLog($"[BaseTime] Hide [Algebraic] -> {newBaseTime:F2} min/unit");
-                                }
-                                else if (!toolKnownFlags[toolIndex].Gut && gutUnits > 0)
-                                {
-                                    float newBaseTime = remainingTime / gutUnits;
-                                    toolBaseTimes[toolIndex] = (toolBaseTimes[toolIndex].Meat, toolBaseTimes[toolIndex].Hide, newBaseTime);
-                                    toolKnownFlags[toolIndex] = (toolKnownFlags[toolIndex].Meat, toolKnownFlags[toolIndex].Hide, true);
-                                    Main.DebugLog($"[BaseTime] Gut [Algebraic] -> {newBaseTime:F2} min/unit");
-                                }
-                            } 
-                        } // End of anyAmountChanged block
-
-                        lastMeatAmount = meatAmount;
-                        lastHideUnits = hideUnits;
-                        lastGutUnits = gutUnits;
-
-                        float originalMeatTime = meatAmount * toolBaseTimes[toolIndex].Meat;
-                        float originalHideTime = hideUnits * toolBaseTimes[toolIndex].Hide;
-                        float originalGutTime = gutUnits * toolBaseTimes[toolIndex].Gut;
-
-                        float adjustedMeatTime = originalMeatTime * meatMultiplier;
-                        float adjustedHideTime = originalHideTime * hideMultiplier;
-                        float adjustedGutTime = originalGutTime * gutMultiplier;
-
-                        float totalAdjustedHarvestTime = adjustedMeatTime + adjustedHideTime + adjustedGutTime;
-                        float totalUnadjustedHarvestTime = originalMeatTime + originalHideTime + originalGutTime;
-
-                        __result = totalAdjustedHarvestTime;
-
-                        if (HarvestState.logPending)
-                        {
-                            string logDetails = $"Tool: {toolIndex} - ";
-                            logDetails += $"{meatAmount:F1}kg Meat {originalMeatTime:F1}m -> {adjustedMeatTime:F1}m ({meatMultiplier:F2}x), ";
-                            logDetails += $"{hideUnits}x Hide {originalHideTime:F1}m -> {adjustedHideTime:F1}m ({hideMultiplier:F2}x), ";
-                            logDetails += $"{gutUnits}x Gut {originalGutTime:F1}m -> {adjustedGutTime:F1}m ({gutMultiplier:F2}x), ";
-                            logDetails += $"- Total {totalUnadjustedHarvestTime:F1}m -> {totalAdjustedHarvestTime:F1}m ";
-                            logDetails += $"({(totalUnadjustedHarvestTime > 0 ? (float.IsNaN(totalAdjustedHarvestTime / totalUnadjustedHarvestTime) ? 0f : totalAdjustedHarvestTime / totalUnadjustedHarvestTime) : 0f):F2}x)";
-                            Main.DebugLog(logDetails);
-                            HarvestState.logPending = false;
+                            Main.DebugLog($"" +
+                                $"Meat {originalValues[item].meat:F1} -> {originalValues[item].meat * meatMultiplier:F1}m/kg ({meatMultiplier:F2}x), " +
+                                $"FrozenMeat {originalValues[item].frozenMeat:F1} -> {originalValues[item].frozenMeat * frozenMeatMultiplier:F1}m/kg ({frozenMeatMultiplier:F2}x), " +
+                                $"Gut {originalValues[item].gut:F1} -> {originalValues[item].gut * gutMultiplier:F1}m/unit ({gutMultiplier:F2}x), " +
+                                $"Hide {originalValues[item].hide:F1} -> {originalValues[item].hide * hideMultiplier:F1}m/unit ({hideMultiplier:F2}x)" +
+                                $" - {item.name}");
                         }
                     }
                     catch (Exception ex)
                     {
-                        MelonLogger.Error($"Error in Patch_HarvestDuration: {ex}");
+                        MelonLoader.MelonLogger.Error($"Error in Patch_BodyHarvestItems: {ex}");
                     }
                 }
-            }
+            } // End of Patch_BodyHarvestItems
 
 
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnIncreaseMeatHarvest))]
-            internal class Patch_OnIncreaseMeatHarvest
+
+            // Reset the modified values back to their original values
+            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Il2Cpp.Panel_BodyHarvest.Enable),
+                new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
+            internal class Patch_ResetHarvestValues
             {
-                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
+                static void Prefix(Il2Cpp.Panel_BodyHarvest __instance, bool enable)
                 {
-                    if (__instance == null) return;
+                    if (enable || __instance == null) return; // Exit if the panel is opening
 
-                    HarvestState.logPending = true;
+                    try
+                    {
+                        foreach (var item in originalValues.Keys.ToList())
+                        {
+                            if (item == null) continue;
+
+                            // Restore original values
+                            if (originalValues.TryGetValue(item, out var values))
+                            {
+                                ModifyFieldValue(item, "set_m_HarvestMeatMinutesPerKG", values.meat);
+                                ModifyFieldValue(item, "set_m_HarvestFrozenMeatMinutesPerKG", values.frozenMeat);
+                                ModifyFieldValue(item, "set_m_HarvestGutMinutesPerUnit", values.gut);
+                                ModifyFieldValue(item, "set_m_HarvestHideMinutesPerUnit", values.hide);
+                            }
+
+                        }
+
+                        Main.DebugLog($"[Close] Restored initial harvest time values for {originalValues.Count} tools.");
+                        // Clear stored original values after reset
+                        originalValues.Clear();
+                    }
+                    catch (Exception ex)
+                    {
+                        MelonLoader.MelonLogger.Error($"Error in Patch_ResetHarvestValues: {ex}");
+                    }
                 }
-            }
-
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnDecreaseMeatHarvest))]
-            internal class Patch_OnDecreaseMeatHarvest
-            {
-                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
-                {
-                    if (__instance == null) return;
-
-                    HarvestState.logPending = true;
-                }
-            }
-
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnIncreaseHideHarvest))]
-            internal class Patch_OnIncreaseHideHarvest
-            {
-                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
-                {
-                    if (__instance == null) return;
-
-                    HarvestState.logPending = true;
-                }
-            }
-
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnDecreaseHideHarvest))]
-            internal class Patch_OnDecreaseHideHarvest
-            {
-                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
-                {
-                    if (__instance == null) return;
-
-                    HarvestState.logPending = true;
-                }
-            }
-
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnIncreaseGutHarvest))]
-            internal class Patch_OnIncreaseGutHarvest
-            {
-                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
-                {
-                    if (__instance == null) return;
-
-                    HarvestState.logPending = true;
-                }
-            }
-
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnDecreaseGutHarvest))]
-            internal class Patch_OnDecreaseGutHarvest
-            {
-                static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
-                {
-                    if (__instance == null) return;
-
-                    HarvestState.logPending = true;
-                }
-            }
+            } // End of Patch_ResetHarvestValues
 
 
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnToolNext))]
-            internal class Patch_OnToolNext
-            {
-                static void Postfix()
-                {
-                    HarvestState.toolChanged = true;  // Mark tool switch detected
-                    HarvestState.logPending = true;
-                }
-            }
 
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.OnToolPrev))]
-            internal class Patch_OnToolPrev
-            {
-                static void Postfix()
-                {
-                    HarvestState.toolChanged = true;  // Mark tool switch detected
-                    HarvestState.logPending = true;
-                }
-            }
-
+            // Patch to change the maxiumum harvest time 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.Enable), new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
             internal class Patch_MaxHarvestTime
             {
@@ -534,7 +198,6 @@ namespace CarcassYieldTweaker
                     if (!enable || __instance == null) return;// Exit if panel is closing or if null
                     try
                     {
-                        HarvestState.panelOpened = true;  // Mark log pending for initial values
                         // Override the max harvest time if the global setting is not the default value
                         if (__instance.m_MaxTimeHours != Settings.instance.MaxHarvestTimeSliderGlobal)
                         {
@@ -545,40 +208,23 @@ namespace CarcassYieldTweaker
                     catch (Exception ex) { MelonLogger.Error($"Error on Patch_MaxHarvestTime: {ex}"); }
                 }
             }
-
-            [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.Enable),
-                new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
-            internal class Patch_ClearHarvestSettings
-            {
-                static void Prefix(Il2Cpp.Panel_BodyHarvest __instance, bool enable)
-                {
-                    // ON CLOSE PANEL
-                    if (enable || __instance == null) return; // Exit if the panel is opening or if null
-
-                    try
-                    {
-                        // Clear custom state and modified harvest times
-                        Main.DebugLog("Patch_ClearHarvestSettings: Panel_BodyHarvest closed, clearing state.");
-
-                        __instance.m_HarvestTimeMinutes = 0f;
-
-                        // Reset static variables in Patch_HarvestDuration
-                        Patch_HarvestDuration.ResetHarvestVariables();
-                    }
-                    catch (Exception ex)
-                    {
-                        MelonLogger.Error($"Error in ClearHarvestSettings: {ex}");
-                    }
-                }
-            }
+        } // End of Panel_BodyHarvest_Time_Patches
 
 
-        } // End of Panel_BodyHarvest_TimePatches
 
 
 
         internal class Panel_BodyHarvest_Display_Patches
-            {
+        {
+
+            private static readonly UnityEngine.Color Green = new UnityEngine.Color(0, 0.808f, 0.518f, 1);
+            private static readonly UnityEngine.Color Yellow = new UnityEngine.Color(0.827f, 0.729f, 0, 1);
+            private static readonly UnityEngine.Color Orange = new UnityEngine.Color(0.827f, 0.471f, 0, 1);
+            private static readonly UnityEngine.Color Red = new UnityEngine.Color(0.639f, 0.204f, 0.231f, 1);
+            private static readonly UnityEngine.Color White = new UnityEngine.Color(1, 1, 1, 1);
+            private static readonly UnityEngine.Color Cyan = new UnityEngine.Color(0.447f, 0.765f, 0.765f, 1);
+            private static readonly UnityEngine.Color Blue = new UnityEngine.Color(0, 0.251f, 0.502f, 1);
+
 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.Enable), new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
             internal class Patch_ClearConditionAndFrozenLabels
@@ -619,7 +265,7 @@ namespace CarcassYieldTweaker
                     }
                     catch (Exception ex)
                     {
-                      MelonLogger.Error($"Error in ClearConditionAndFrozenLabels: {ex}");
+                        MelonLogger.Error($"Error in ClearConditionAndFrozenLabels: {ex}");
                     }
                 }
             }
@@ -741,24 +387,11 @@ namespace CarcassYieldTweaker
                     }
                 }
             }
-                private static string FormatTimeLog(float original, float adjusted, float multiplier)
-                {
-                    return $"{original:F1}m -> {adjusted:F1}m ({multiplier:F1}x)";
-                }
-
-                private static readonly UnityEngine.Color Green = new UnityEngine.Color(0, 0.808f, 0.518f, 1);
-                private static readonly UnityEngine.Color Yellow = new UnityEngine.Color(0.827f, 0.729f, 0, 1);
-                private static readonly UnityEngine.Color Orange = new UnityEngine.Color(0.827f, 0.471f, 0, 1);
-                private static readonly UnityEngine.Color Red = new UnityEngine.Color(0.639f, 0.204f, 0.231f, 1);
-                private static readonly UnityEngine.Color White = new UnityEngine.Color(1, 1, 1, 1);
-                private static readonly UnityEngine.Color Cyan = new UnityEngine.Color(0.447f, 0.765f, 0.765f, 1);
-                private static readonly UnityEngine.Color Blue = new UnityEngine.Color(0, 0.251f, 0.502f, 1);
-
-            } // End of Panel_BodyHarvest_TimePatches
+        } // End of Panel_BodyHarvest_TimePatches
 
 
 
-            internal static class BodyHarvest_Patches
+        internal static class BodyHarvest_Patches
         {
 
             //Quantity and Quarter time Patching
