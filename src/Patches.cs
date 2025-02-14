@@ -13,10 +13,8 @@ namespace CarcassYieldTweaker
 {
     internal static class Patches
     {
-
         internal static class Panel_BodyHarvest_Time_Patches
         {
-
 
             // Helper method to retrieve the rounded multiplier based on the item type and animal type
             private static float GetRoundedMultiplier(string itemType, string animalType)
@@ -26,24 +24,24 @@ namespace CarcassYieldTweaker
                 // Dictionary for animal-specific Hide multipliers
                 var animalHideMultipliers = new Dictionary<string, float>
                 {
-                    { "GEAR_RabbitCarcass", Settings.instance.HideTimeSliderRabbit },
-                    { "GEAR_PtarmiganCarcass", Settings.instance.HideTimeSliderPtarmigan },
-                    { "WILDLIFE_Doe", Settings.instance.HideTimeSliderDoe },
-                    { "WILDLIFE_Stag", Settings.instance.HideTimeSliderStag },
-                    { "WILDLIFE_Moose", Settings.instance.HideTimeSliderMoose },
-                    { "WILDLIFE_Wolf", Settings.instance.HideTimeSliderWolf },
-                    { "WILDLIFE_Wolf_grey", Settings.instance.HideTimeSliderTimberWolf },
-                    { "WILDLIFE_Wolf_Starving", Settings.instance.HideTimeSliderPoisonedWolf },
-                    { "WILDLIFE_Bear", Settings.instance.HideTimeSliderBear },
-                    { "WILDLIFE_Cougar", Settings.instance.HideTimeSliderCougar }
+                    { "GEAR_RabbitCarcass", Settings.instance.Animal_HideTimeSliderRabbit },
+                    { "GEAR_PtarmiganCarcass", Settings.instance.Animal_HideTimeSliderPtarmigan },
+                    { "WILDLIFE_Doe", Settings.instance.Animal_HideTimeSliderDoe },
+                    { "WILDLIFE_Stag", Settings.instance.Animal_HideTimeSliderStag },
+                    { "WILDLIFE_Moose", Settings.instance.Animal_HideTimeSliderMoose },
+                    { "WILDLIFE_Wolf", Settings.instance.Animal_HideTimeSliderRegularWolf },
+                    { "WILDLIFE_Wolf_grey", Settings.instance.Animal_HideTimeSliderTimberWolf },
+                    { "WILDLIFE_Wolf_Starving", Settings.instance.Animal_HideTimeSliderPoisonedWolf },
+                    { "WILDLIFE_Bear", Settings.instance.Animal_HideTimeSliderBear },
+                    { "WILDLIFE_Cougar", Settings.instance.Animal_HideTimeSliderCougar }
                 };
 
                 // Default to global multipliers for Meat, FrozenMeat, and Gut - can be expanded by adding additional dictionaries if needed
                 var globalMultipliers = new Dictionary<string, float>
                 {
-                    { "Meat", Settings.instance.MeatTimeSliderGlobal },
-                    { "FrozenMeat", Settings.instance.FrozenMeatTimeSliderGlobal },
-                    { "Gut", Settings.instance.GutTimeSliderGlobal }
+                    { "Meat", Settings.instance.Global_MeatTimeSlider },
+                    { "FrozenMeat", Settings.instance.Global_FrozenMeatTimeSlider },
+                    { "Gut", Settings.instance.Global_GutTimeSlider }
                 };
 
                 // Determine the multiplier based on item type
@@ -98,7 +96,7 @@ namespace CarcassYieldTweaker
             {
                 static void Postfix(Il2Cpp.Panel_BodyHarvest __instance, bool enable)
                 {
-                    if (!enable || __instance == null) return;
+                    if (!enable || __instance == null || !Settings.instance.enableMod) return;
                     try
                     {
                         if (__instance.m_BodyHarvest == null)
@@ -194,7 +192,7 @@ namespace CarcassYieldTweaker
             {
                 static void Prefix(Il2Cpp.Panel_BodyHarvest __instance, bool enable)
                 {
-                    if (enable || __instance == null) return; // Exit if the panel is opening
+                    if (enable || __instance == null || !Settings.instance.enableMod) return; // Exit if the panel is opening
 
                     try
                     {
@@ -249,14 +247,14 @@ namespace CarcassYieldTweaker
                 static void Prefix(Il2Cpp.Panel_BodyHarvest __instance, bool enable)
                 {
                     // ON OPEN PANEL
-                    if (!enable || __instance == null) return;// Exit if panel is closing or if null
+                    if (!enable || __instance == null || !Settings.instance.enableMod) return;// Exit if panel is closing or if null
                     try
                     {
                         // Override the max harvest time if the global setting is not the default value
-                        if (__instance.m_MaxTimeHours != Settings.instance.MaxHarvestTimeSliderGlobal)
+                        if (__instance.m_MaxTimeHours != Settings.instance.Global_MaxHarvestTimeSlider)
                         {
-                            __instance.m_MaxTimeHours = Settings.instance.MaxHarvestTimeSliderGlobal;
-                            Main.DebugLog($"Updated m_MaxTimeHours to {Settings.instance.MaxHarvestTimeSliderGlobal}.");
+                            __instance.m_MaxTimeHours = Settings.instance.Global_MaxHarvestTimeSlider;
+                            Main.DebugLog($"Updated m_MaxTimeHours to {Settings.instance.Global_MaxHarvestTimeSlider}.");
                         }
                     }
                     catch (Exception ex) { MelonLogger.Error($"Error on Patch_MaxHarvestTime: {ex}"); }
@@ -288,7 +286,7 @@ namespace CarcassYieldTweaker
                 static void Prefix(Il2Cpp.Panel_BodyHarvest __instance, bool enable)
                 {
                     // ON CLOSE PANEL
-                    if (enable || __instance == null) return; // Exit if the panel is opening or if null
+                    if (enable || __instance == null || !Settings.instance.enableMod) return; // Exit if the panel is opening or if null
 
                     try 
                     { 
@@ -297,7 +295,7 @@ namespace CarcassYieldTweaker
                         if (frozenLabelParent != null)
                         {
 
-                            if (Settings.instance.ShowPanelCondition) 
+                            if (Settings.instance.Extra_ShowPanelCondition) 
                             {
                                 var conditionLabel = frozenLabelParent.Find("ConditionLabel");
                                 if (conditionLabel != null)
@@ -307,7 +305,7 @@ namespace CarcassYieldTweaker
                                 }
                             }
 
-                            if (Settings.instance.AlwaysShowPanelFrozenPercent)
+                            if (Settings.instance.Extra_AlwaysShowPanelFrozenPercent)
                             {
                                 // Destroy custom frozen label if it exists
                                 var customFrozenLabel = frozenLabelParent.Find("CustomFrozenLabel");
@@ -337,7 +335,7 @@ namespace CarcassYieldTweaker
 
                 static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
                 {
-                    if (!Settings.instance.ShowPanelCondition || __instance == null) return; // Exit if setting is disabled or if null
+                    if (!Settings.instance.Extra_ShowPanelCondition || __instance == null || !Settings.instance.enableMod) return; // Exit if setting is disabled or if null
 
                     try
                     {
@@ -366,7 +364,7 @@ namespace CarcassYieldTweaker
                         if (conditionLabel.text != newText)
                         {
                             conditionLabel.text = newText;
-                            if (Settings.instance.ShowPanelConditionColors) { conditionLabel.color = GetConditionColor(carcassCondition); }
+                            if (Settings.instance.Extra_ShowPanelConditionColors) { conditionLabel.color = GetConditionColor(carcassCondition); }
                         }
 
                         if (!conditionLabel.gameObject.activeSelf)
@@ -392,7 +390,7 @@ namespace CarcassYieldTweaker
 
                 static void Postfix(Il2Cpp.Panel_BodyHarvest __instance)
                 {
-                    if (!Settings.instance.AlwaysShowPanelFrozenPercent || __instance == null) return; // Exit if setting is disabled or if null
+                    if (!Settings.instance.Extra_AlwaysShowPanelFrozenPercent || __instance == null || !Settings.instance.enableMod) return; // Exit if setting is disabled or if null
 
                     try
                     {
@@ -428,7 +426,7 @@ namespace CarcassYieldTweaker
                         if (customFrozenLabel.text != $"({percentFrozen}% FROZEN)")
                         {
                             customFrozenLabel.text = $"({percentFrozen}% FROZEN)";
-                            if (Settings.instance.ShowPanelFrozenColors) { customFrozenLabel.color = GetFrozenColor(percentFrozen); }
+                            if (Settings.instance.Extra_ShowPanelFrozenColors) { customFrozenLabel.color = GetFrozenColor(percentFrozen); }
                         }
 
                         if (!customFrozenLabel.gameObject.activeSelf)
@@ -456,107 +454,107 @@ namespace CarcassYieldTweaker
             {
                 private static void Prefix(Il2Cpp.BodyHarvest __instance)
                 {
-                    if (__instance == null || string.IsNullOrEmpty(__instance.name)) return;
+                    if (__instance == null || string.IsNullOrEmpty(__instance.name) || !Settings.instance.enableMod) return;
                     try
                     {
                         //Main.DebugLog($"{__instance.name} Original fat threeItemRatio: " + __instance.m_FatToMeatRatio);
                         if (__instance.name.StartsWith("WILDLIFE_Rabbit"))
                         {
-                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMinRabbit, 1));
-                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMaxRabbit, 1));
-                            __instance.m_HideAvailableUnits = Settings.instance.HideCountSliderRabbit;
-                            __instance.m_GutAvailableUnits = Settings.instance.GutCountSliderRabbit;
+                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMinRabbit, 1));
+                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMaxRabbit, 1));
+                            __instance.m_HideAvailableUnits = Settings.instance.Animal_HideCountSliderRabbit;
+                            __instance.m_GutAvailableUnits = Settings.instance.Animal_GutCountSliderRabbit;
                         }
 
                         if (__instance.name.StartsWith("WILDLIFE_Ptarmigan"))
                         {
-                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMinPtarmigan, 1));
-                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMaxPtarmigan, 1));
-                            __instance.m_HideAvailableUnits = Settings.instance.HideCountSliderPtarmigan;
+                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMinPtarmigan, 1));
+                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMaxPtarmigan, 1));
+                            __instance.m_HideAvailableUnits = Settings.instance.Animal_HideCountSliderPtarmigan;
                         }
 
                         if (__instance.name.StartsWith("WILDLIFE_Doe"))
                         {
-                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMinDoe, 1));
-                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMaxDoe, 1));
-                            __instance.m_HideAvailableUnits = Settings.instance.HideCountSliderDoe;
-                            __instance.m_GutAvailableUnits = Settings.instance.GutCountSliderDoe;
-                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.QuarterSizeSliderDoe,1));
-                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.QuarterDurationMinutesSliderDoe;
-                            __instance.m_FatToMeatRatio = Settings.instance.FatToMeatPercentSliderDoe / 100f;
+                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMinDoe, 1));
+                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMaxDoe, 1));
+                            __instance.m_HideAvailableUnits = Settings.instance.Animal_HideCountSliderDoe;
+                            __instance.m_GutAvailableUnits = Settings.instance.Animal_GutCountSliderDoe;
+                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_QuarterSizeSliderDoe,1));
+                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.Animal_QuarterDurationMinutesSliderDoe;
+                            __instance.m_FatToMeatRatio = Settings.instance.Animal_FatToMeatPercentSliderDoe / 100f;
 
                         }
 
                         if (__instance.name.StartsWith("WILDLIFE_Stag"))
                         {
-                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMaxStag, 1));
-                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMinStag, 1));
-                            __instance.m_HideAvailableUnits = Settings.instance.HideCountSliderStag;
-                            __instance.m_GutAvailableUnits = Settings.instance.GutCountSliderStag;
-                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.QuarterSizeSliderStag, 1));
-                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.QuarterDurationMinutesSliderStag;
-                            __instance.m_FatToMeatRatio = Settings.instance.FatToMeatPercentSliderStag / 100f;
+                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMaxStag, 1));
+                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMinStag, 1));
+                            __instance.m_HideAvailableUnits = Settings.instance.Animal_HideCountSliderStag;
+                            __instance.m_GutAvailableUnits = Settings.instance.Animal_GutCountSliderStag;
+                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_QuarterSizeSliderStag, 1));
+                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.Animal_QuarterDurationMinutesSliderStag;
+                            __instance.m_FatToMeatRatio = Settings.instance.Animal_FatToMeatPercentSliderStag / 100f;
 
                         }
 
                         if (__instance.name.StartsWith("WILDLIFE_Moose"))
                         {
-                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMaxMoose, 1));
-                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMinMoose, 1));
-                            __instance.m_HideAvailableUnits = Settings.instance.HideCountSliderMoose;
-                            __instance.m_GutAvailableUnits = Settings.instance.GutCountSliderMoose;
-                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.QuarterSizeSliderMoose, 1));
-                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.QuarterDurationMinutesSliderMoose;
-                            __instance.m_FatToMeatRatio = Settings.instance.FatToMeatPercentSliderMoose / 100f;
+                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMaxMoose, 1));
+                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMinMoose, 1));
+                            __instance.m_HideAvailableUnits = Settings.instance.Animal_HideCountSliderMoose;
+                            __instance.m_GutAvailableUnits = Settings.instance.Animal_GutCountSliderMoose;
+                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_QuarterSizeSliderMoose, 1));
+                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.Animal_QuarterDurationMinutesSliderMoose;
+                            __instance.m_FatToMeatRatio = Settings.instance.Animal_FatToMeatPercentSliderMoose / 100f;
                         }
 
                         // Extra logic for wolves to handle the different types
                         if (__instance.name.StartsWith("WILDLIFE_Wolf_Starving"))
                         {
-                            __instance.m_HideAvailableUnits = Settings.instance.HideCountSliderPoisonedWolf;
-                            __instance.m_GutAvailableUnits = Settings.instance.GutCountSliderPoisonedWolf;
+                            __instance.m_HideAvailableUnits = Settings.instance.Animal_HideCountSliderPoisonedWolf;
+                            __instance.m_GutAvailableUnits = Settings.instance.Animal_GutCountSliderPoisonedWolf;
                         }
                         else if (__instance.name.StartsWith("WILDLIFE_Wolf_grey"))
                         {
-                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMaxTimberWolf, 1));
-                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMinTimberWolf, 1));
-                            __instance.m_HideAvailableUnits = Settings.instance.HideCountSliderTimberWolf;
-                            __instance.m_GutAvailableUnits = Settings.instance.GutCountSliderTimberWolf;
-                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.QuarterSizeSliderTimberWolf, 1));
-                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.QuarterDurationMinutesSliderTimberWolf;
-                            __instance.m_FatToMeatRatio = Settings.instance.FatToMeatPercentSliderTimberWolf / 100f;
+                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMaxTimberWolf, 1));
+                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMinTimberWolf, 1));
+                            __instance.m_HideAvailableUnits = Settings.instance.Animal_HideCountSliderTimberWolf;
+                            __instance.m_GutAvailableUnits = Settings.instance.Animal_GutCountSliderTimberWolf;
+                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_QuarterSizeSliderTimberWolf, 1));
+                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.Animal_QuarterDurationMinutesSliderTimberWolf;
+                            __instance.m_FatToMeatRatio = Settings.instance.Animal_FatToMeatPercentSliderTimberWolf / 100f;
                         }
                         else if (__instance.name.StartsWith("WILDLIFE_Wolf"))
                         {
-                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMaxWolf, 1));
-                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMinWolf, 1));
-                            __instance.m_HideAvailableUnits = Settings.instance.HideCountSliderWolf;
-                            __instance.m_GutAvailableUnits = Settings.instance.GutCountSliderWolf;
-                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.QuarterSizeSliderWolf, 1));
-                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.QuarterDurationMinutesSliderWolf;
-                            __instance.m_FatToMeatRatio = Settings.instance.FatToMeatPercentSliderWolf / 100f;
+                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMaxRegularWolf, 1));
+                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMinRegularWolf, 1));
+                            __instance.m_HideAvailableUnits = Settings.instance.Animal_HideCountSliderRegularWolf;
+                            __instance.m_GutAvailableUnits = Settings.instance.Animal_GutCountSliderRegularWolf;
+                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_QuarterSizeSliderRegularWolf, 1));
+                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.Animal_QuarterDurationMinutesSliderRegularWolf;
+                            __instance.m_FatToMeatRatio = Settings.instance.Animal_FatToMeatPercentSliderRegularWolf / 100f;
                         }
 
                         if (__instance.name.StartsWith("WILDLIFE_Bear"))
                         {
-                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMaxBear, 1));
-                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMinBear, 1));
-                            __instance.m_HideAvailableUnits = Settings.instance.HideCountSliderBear;
-                            __instance.m_GutAvailableUnits = Settings.instance.GutCountSliderBear;
-                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.QuarterSizeSliderBear, 1));
-                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.QuarterDurationMinutesSliderBear;
-                            __instance.m_FatToMeatRatio = Settings.instance.FatToMeatPercentSliderBear / 100f;
+                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMaxBear, 1));
+                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMinBear, 1));
+                            __instance.m_HideAvailableUnits = Settings.instance.Animal_HideCountSliderBear;
+                            __instance.m_GutAvailableUnits = Settings.instance.Animal_GutCountSliderBear;
+                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_QuarterSizeSliderBear, 1));
+                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.Animal_QuarterDurationMinutesSliderBear;
+                            __instance.m_FatToMeatRatio = Settings.instance.Animal_FatToMeatPercentSliderBear / 100f;
                         }
 
                         if (__instance.name.StartsWith("WILDLIFE_Cougar"))
                         {
-                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMaxCougar, 1));
-                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.MeatSliderMinCougar, 1));
-                            __instance.m_HideAvailableUnits = Settings.instance.HideCountSliderCougar;
-                            __instance.m_GutAvailableUnits = Settings.instance.GutCountSliderCougar;
-                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.QuarterSizeSliderCougar, 1));
-                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.QuarterDurationMinutesSliderCougar;
-                            __instance.m_FatToMeatRatio = Settings.instance.FatToMeatPercentSliderCougar / 100f;
+                            __instance.m_MeatAvailableMax = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMaxCougar, 1));
+                            __instance.m_MeatAvailableMin = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_MeatSliderMinCougar, 1));
+                            __instance.m_HideAvailableUnits = Settings.instance.Animal_HideCountSliderCougar;
+                            __instance.m_GutAvailableUnits = Settings.instance.Animal_GutCountSliderCougar;
+                            __instance.m_QuarterBagMeatCapacity = ItemWeight.FromKilograms((float)Math.Round(Settings.instance.Animal_QuarterSizeSliderCougar, 1));
+                            __instance.m_QuarterDurationMinutes = (float)Settings.instance.Animal_QuarterDurationMinutesSliderCougar;
+                            __instance.m_FatToMeatRatio = Settings.instance.Animal_FatToMeatPercentSliderCougar / 100f;
                         }
 
                         //Main.DebugLog($"{__instance.name} New fat threeItemRatio: " + __instance.m_FatToMeatRatio);
@@ -578,7 +576,7 @@ namespace CarcassYieldTweaker
                 internal static float defaultDecay = 5f;
                 private static void Prefix(Il2Cpp.BodyHarvest __instance)
                 {
-                    if (__instance == null || string.IsNullOrEmpty(__instance.name) || !Settings.instance.DisableCarcassDecayGlobal ) return;
+                    if (__instance == null || string.IsNullOrEmpty(__instance.name) || !Settings.instance.Extra_DisableCarcassDecayGlobal || !Settings.instance.enableMod) return;
                     try {__instance.m_AllowDecay = false;} catch (Exception ex) {MelonLogger.Error($"Error in Patch_DisableCarcassDecay: {ex}");}
                 }
             }

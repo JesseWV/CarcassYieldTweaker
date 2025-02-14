@@ -12,10 +12,10 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
-[assembly: AssemblyVersion("1.8.1")]
-[assembly: AssemblyFileVersion("1.8.1")]
+[assembly: AssemblyVersion("2.0.0")]
+[assembly: AssemblyFileVersion("2.0.0")]
 [assembly: Guid("d01ec3ff-fa2c-4b95-b8c8-f9eabfaf8b3d")]
-[assembly: MelonInfo(typeof(CarcassYieldTweaker.Main), "CarcassYieldTweaker", "1.8.1", "JoshuaAC, Romain, Lycanthor")]
+[assembly: MelonInfo(typeof(CarcassYieldTweaker.Main), "CarcassYieldTweaker", "2.0.0", "JoshuaAC, Romain, Lycanthor")]
 [assembly: MelonGame("Hinterland", "TheLongDark")]
 
 
