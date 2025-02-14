@@ -7,6 +7,7 @@ using UnityEngine;
 using System.Reflection;
 using System.Collections.Generic;
 using System.Linq;
+using static Il2CppTMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
 
 namespace CarcassYieldTweaker
 {
@@ -82,15 +83,18 @@ namespace CarcassYieldTweaker
             }
 
 
-            // Store original values to reset them later
-            private static Dictionary<Il2Cpp.BodyHarvestItem, (float meat, float frozenMeat, float gut, float hide)> originalValues =
+            // Store original values to reset them later for BodyHarvestItems
+            private static Dictionary<Il2Cpp.BodyHarvestItem, (float meat, float frozenMeat, float gut, float hide)> originalItemValues =
                 new Dictionary<Il2Cpp.BodyHarvestItem, (float, float, float, float)>();
+
+            // Store original values for BodyHarvestSettings
+            private static Dictionary<string, int> originalSettingsValues = new Dictionary<string, int>();
 
 
             // ********************** Patch to change the harvest times for each item type based on the animal type ****************************
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Il2Cpp.Panel_BodyHarvest.Enable),
                 new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
-            internal class Patch_BodyHarvestItems
+            internal class Patch_BodyHarvestSettings_BodyHarvestItems
             {
                 static void Postfix(Il2Cpp.Panel_BodyHarvest __instance, bool enable)
                 {
@@ -113,12 +117,48 @@ namespace CarcassYieldTweaker
 
                         Main.DebugLog($"[HarvestItems] Animal: {animalType}, Tools: {items.Count} ");
 
+                        // Modify BodyHarvestSettings
+                        var settingsInstance = UnityEngine.Resources.FindObjectsOfTypeAll<Il2CppTLD.Gameplay.BodyHarvestSettings>().FirstOrDefault();
+                        if (settingsInstance == null)
+                        {
+                            MelonLoader.MelonLogger.Msg("[Debug] No BodyHarvestSettings instance found.");
+                            return;
+                        }
+
+                        // Store original values before modifying
+                        if (originalSettingsValues.Count == 0)
+                        {
+                            originalSettingsValues["m_HarvestMeatMinutesPerKG"] = settingsInstance.m_HarvestMeatMinutesPerKG;
+                            originalSettingsValues["m_HarvestFrozenMeatMinutesPerKG"] = settingsInstance.m_HarvestFrozenMeatMinutesPerKG;
+                            originalSettingsValues["m_HarvestHideMinutesPerUnit"] = settingsInstance.m_HarvestHideMinutesPerUnit;
+                            originalSettingsValues["m_HarvestGutMinutesPerUnit"] = settingsInstance.m_HarvestGutMinutesPerUnit;
+                        }
+
+                        // Calculate new values based on multipliers and original values 
+                        int newHarvestMeatMinutesPerKG = (int)(settingsInstance.m_HarvestMeatMinutesPerKG * meatMultiplier);
+                        int newHarvestFrozenMeatMinutesPerKG = (int)(settingsInstance.m_HarvestFrozenMeatMinutesPerKG * frozenMeatMultiplier);
+                        int newHarvestHideMinutesPerUnit = (int)(settingsInstance.m_HarvestHideMinutesPerUnit * hideMultiplier);
+                        int newHarvestGutMinutesPerUnit = (int)(settingsInstance.m_HarvestGutMinutesPerUnit * gutMultiplier);
+
+                        // Update BodyHarvestSettings with modified values
+                        settingsInstance.m_HarvestMeatMinutesPerKG = newHarvestMeatMinutesPerKG;
+                        settingsInstance.m_HarvestFrozenMeatMinutesPerKG = newHarvestFrozenMeatMinutesPerKG;
+                        settingsInstance.m_HarvestHideMinutesPerUnit = newHarvestHideMinutesPerUnit;
+                        settingsInstance.m_HarvestGutMinutesPerUnit = newHarvestGutMinutesPerUnit;
+
+                        Main.DebugLog($"Meat {originalSettingsValues["m_HarvestMeatMinutesPerKG"]} m/kg -> {newHarvestMeatMinutesPerKG} m/kg ({meatMultiplier:F2}x) | " +
+                                      $"FrozenMeat {originalSettingsValues["m_HarvestFrozenMeatMinutesPerKG"]} m/kg -> {newHarvestFrozenMeatMinutesPerKG} m/kg ({frozenMeatMultiplier:F2}x) | " +
+                                      $"Gut {originalSettingsValues["m_HarvestHideMinutesPerUnit"]} m/unit -> {newHarvestHideMinutesPerUnit} m/unit ({gutMultiplier:F2}x) | " +
+                                      $"Hide {originalSettingsValues["m_HarvestGutMinutesPerUnit"]} m/unit -> {newHarvestGutMinutesPerUnit} m/unit ({hideMultiplier:F2}x) - Settings");
+
+
+                        // Modify BodyHarvestItems
                         foreach (var item in items)
                         {
                             // --- Store Original Values Before Modifying ---
-                            if (!originalValues.ContainsKey(item))
+                            if (!originalItemValues.ContainsKey(item))
                             {
-                                originalValues[item] = (
+                                originalItemValues[item] = (
                                     GetFieldValue<float>(item, "get_m_HarvestMeatMinutesPerKG"),
                                     GetFieldValue<float>(item, "get_m_HarvestFrozenMeatMinutesPerKG"),
                                     GetFieldValue<float>(item, "get_m_HarvestGutMinutesPerUnit"),
@@ -127,32 +167,30 @@ namespace CarcassYieldTweaker
                             }
 
                             // --- Update Harvest Times ---
-                            ModifyFieldValue(item, "set_m_HarvestMeatMinutesPerKG", originalValues[item].meat * meatMultiplier);
-                            ModifyFieldValue(item, "set_m_HarvestFrozenMeatMinutesPerKG", originalValues[item].frozenMeat * frozenMeatMultiplier);
-                            ModifyFieldValue(item, "set_m_HarvestGutMinutesPerUnit", originalValues[item].gut * gutMultiplier);
-                            ModifyFieldValue(item, "set_m_HarvestHideMinutesPerUnit", originalValues[item].hide * hideMultiplier);
+                            ModifyFieldValue(item, "set_m_HarvestMeatMinutesPerKG", originalItemValues[item].meat * meatMultiplier);
+                            ModifyFieldValue(item, "set_m_HarvestFrozenMeatMinutesPerKG", originalItemValues[item].frozenMeat * frozenMeatMultiplier);
+                            ModifyFieldValue(item, "set_m_HarvestGutMinutesPerUnit", originalItemValues[item].gut * gutMultiplier);
+                            ModifyFieldValue(item, "set_m_HarvestHideMinutesPerUnit", originalItemValues[item].hide * hideMultiplier);
 
-                            Main.DebugLog($"" +
-                                $"Meat {originalValues[item].meat:F1} -> {originalValues[item].meat * meatMultiplier:F1}m/kg ({meatMultiplier:F2}x), " +
-                                $"FrozenMeat {originalValues[item].frozenMeat:F1} -> {originalValues[item].frozenMeat * frozenMeatMultiplier:F1}m/kg ({frozenMeatMultiplier:F2}x), " +
-                                $"Gut {originalValues[item].gut:F1} -> {originalValues[item].gut * gutMultiplier:F1}m/unit ({gutMultiplier:F2}x), " +
-                                $"Hide {originalValues[item].hide:F1} -> {originalValues[item].hide * hideMultiplier:F1}m/unit ({hideMultiplier:F2}x)" +
-                                $" - {item.name}");
+                            Main.DebugLog($"Meat {originalItemValues[item].meat:F1} m/kg -> {originalItemValues[item].meat * meatMultiplier:F1} m/kg ({meatMultiplier:F2}x), | " +
+                                          $"FrozenMeat {originalItemValues[item].frozenMeat:F1} m/kg -> {originalItemValues[item].frozenMeat * frozenMeatMultiplier:F1} m/kg ({frozenMeatMultiplier:F2}x), | " +
+                                          $"Gut {originalItemValues[item].gut:F1} m/unit -> {originalItemValues[item].gut * gutMultiplier:F1} m/unit ({gutMultiplier:F2}x), | " +
+                                          $"Hide {originalItemValues[item].hide:F1} m/unit-> {originalItemValues[item].hide * hideMultiplier:F1} m/unit ({hideMultiplier:F2}x) - {item.name}");
                         }
+
                     }
                     catch (Exception ex)
                     {
-                        MelonLoader.MelonLogger.Error($"Error in Patch_BodyHarvestItems: {ex}");
+                        MelonLoader.MelonLogger.Error($"Error in Patch_BodyHarvestSettings_BodyHarvestItems: {ex}");
                     }
                 }
-            } // End of Patch_BodyHarvestItems
+            } // End of Patch_BodyHarvestSettings_BodyHarvestItems
 
 
-
-            // Reset the modified values back to their original values
+            // ********************** Patch to Reset Values When the Panel Closes ****************************
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Il2Cpp.Panel_BodyHarvest.Enable),
                 new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
-            internal class Patch_ResetHarvestValues
+            internal class Patch_ResetHarvestTimes
             {
                 static void Prefix(Il2Cpp.Panel_BodyHarvest __instance, bool enable)
                 {
@@ -160,33 +198,49 @@ namespace CarcassYieldTweaker
 
                     try
                     {
-                        foreach (var item in originalValues.Keys.ToList())
+                        // Reset BodyHarvestSettings values
+                        var settingsInstance = UnityEngine.Resources.FindObjectsOfTypeAll<Il2CppTLD.Gameplay.BodyHarvestSettings>().FirstOrDefault();
+                        if (settingsInstance == null)
+                        {
+                            MelonLoader.MelonLogger.Msg("[Debug] No BodyHarvestSettings instance found for reset.");
+                            return;
+                        }
+
+                        if (originalSettingsValues.Count > 0)
+                        {
+                            settingsInstance.m_HarvestMeatMinutesPerKG = originalSettingsValues["m_HarvestMeatMinutesPerKG"];
+                            settingsInstance.m_HarvestFrozenMeatMinutesPerKG = originalSettingsValues["m_HarvestFrozenMeatMinutesPerKG"];
+                            settingsInstance.m_HarvestHideMinutesPerUnit = originalSettingsValues["m_HarvestHideMinutesPerUnit"];
+                            settingsInstance.m_HarvestGutMinutesPerUnit = originalSettingsValues["m_HarvestGutMinutesPerUnit"];
+
+                        }
+                        originalSettingsValues.Clear();
+
+
+                        // Reset BodyHarvestItem values
+                        foreach (var item in originalItemValues.Keys.ToList())
                         {
                             if (item == null) continue;
 
-                            // Restore original values
-                            if (originalValues.TryGetValue(item, out var values))
+                            if (originalItemValues.TryGetValue(item, out var values))
                             {
                                 ModifyFieldValue(item, "set_m_HarvestMeatMinutesPerKG", values.meat);
                                 ModifyFieldValue(item, "set_m_HarvestFrozenMeatMinutesPerKG", values.frozenMeat);
                                 ModifyFieldValue(item, "set_m_HarvestGutMinutesPerUnit", values.gut);
                                 ModifyFieldValue(item, "set_m_HarvestHideMinutesPerUnit", values.hide);
                             }
-
                         }
+                        originalItemValues.Clear();
 
-                        Main.DebugLog($"[Close] Restored initial harvest time values for {originalValues.Count} tools.");
-                        // Clear stored original values after reset
-                        originalValues.Clear();
+                        Main.DebugLog($"[Close] Restored original harvest time settings and harvest time values for {originalItemValues.Count} tools.");
+
                     }
                     catch (Exception ex)
                     {
-                        MelonLoader.MelonLogger.Error($"Error in Patch_ResetHarvestValues: {ex}");
+                        MelonLoader.MelonLogger.Error($"Error in Patch_ResetHarvestTimes: {ex}");
                     }
                 }
-            } // End of Patch_ResetHarvestValues
-
-
+            } // End of Patch_ResetHarvestTimes
 
             // Patch to change the maxiumum harvest time 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.Enable), new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
@@ -208,8 +262,10 @@ namespace CarcassYieldTweaker
                     catch (Exception ex) { MelonLogger.Error($"Error on Patch_MaxHarvestTime: {ex}"); }
                 }
             }
+
         } // End of Panel_BodyHarvest_Time_Patches
 
+        
 
 
 
