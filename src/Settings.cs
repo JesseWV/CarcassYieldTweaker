@@ -1,6 +1,7 @@
 ﻿using ModSettings;
 using System.Reflection;
 using System.Collections.Generic;
+using Il2CppSystem.Linq.Expressions;
 
 namespace CarcassYieldTweaker
 {
@@ -12,192 +13,235 @@ namespace CarcassYieldTweaker
         {
             Instance.AddToModSettings("Carcass Yield Tweaker");
             Instance.UpdateVisibility();
+            Instance.RefreshGUI();
+
         }
 
-        // Define enums for presets and animal selection.
-        public enum PresetOptions { Vanilla, Realistic, Balanced, Custom }
-        public enum SettingsCategory { Global, Animal, Extra }
 
+        // Constants for preset values.
+        private const int PRESET_VANILLA = 0;
+        private const int PRESET_REALISTIC = 1;
+        private const int PRESET_BALANCED = 2;
+        private const int PRESET_CUSTOM = 3;
 
-        public enum AnimalType { Rabbit, Ptarmigan, Doe, Stag, Moose, RegularWolf, TimberWolf, PoisonedWolf, Bear, Cougar }
+        // Constants for settings categories.
+        private const int SETTINGS_GLOBAL = 0;
+        private const int SETTINGS_ANIMAL = 1;
+        private const int SETTINGS_EXTRA = 2;
 
-        internal bool isApplyingPreset = false; // Flag to suppress OnChange during Preset_Selection application
+        // A helper function to map the selected animal (an int) to its name.
+        // These names must match the text in your [Choice] attribute.
+        private string GetAnimalFieldName(int animal)
+        {
+            switch (animal)
+            {
+                case 0: return "Rabbit";
+                case 1: return "Ptarmigan";
+                case 2: return "Doe";
+                case 3: return "Stag";
+                case 4: return "Moose";
+                case 5: return "RegularWolf";
+                case 6: return "TimberWolf";
+                case 7: return "PoisonedWolf";
+                case 8: return "Bear";
+                case 9: return "Cougar";
+                default: return "";
+            }
+        }
 
+        static bool isApplyingPreset = false; // Flag to suppress OnChange during Selection_Preset application
         private readonly Dictionary<string, object> customSettingsBackup = new();
 
-
+        bool UpdateVisibilityDebug = false;
         public void UpdateVisibility()
         {
+            FieldInfo[] fields = this.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
-            // If the mod is disabled, only show the enableMod field.
+            // If the mod is disabled, only show enableMod.
             if (!enableMod)
             {
-                FieldInfo[] fields = this.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (UpdateVisibilityDebug) Main.DebugLog("Mod is disabled. Hiding all fields except enableMod.");
                 foreach (FieldInfo field in fields)
                 {
-                    // Only consider UI fields.
                     if (!field.IsDefined(typeof(NameAttribute), false))
                         continue;
-
-                    // Show only the enableMod field.
                     this.SetFieldVisible(field, field.Name == nameof(enableMod));
                 }
+                if (UpdateVisibilityDebug) Main.DebugLog($"[UpdateVisibility] Hiding all fields except enableMod (mod disabled)");
                 return;
             }
 
-            // Otherwise, perform your usual category-based visibility logic.
-            Dictionary<SettingsCategory, string> categoryPrefixes = new Dictionary<SettingsCategory, string>()
+            // If mod is enabled, decide visibility for each field.
+            foreach (FieldInfo field in fields)
             {
-                { SettingsCategory.Global, "Global_" },
-                { SettingsCategory.Animal, "Animal_" },
-                { SettingsCategory.Extra, "Extra_" }
-            };
-
-            FieldInfo[] allFields = this.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            foreach (FieldInfo field in allFields)
-            {
+                // Skip fields without a NameAttribute.
                 if (!field.IsDefined(typeof(NameAttribute), false))
                     continue;
 
-                if (field.Name == nameof(Category_Selection) || field.Name == nameof(Preset_Selection))
+                bool visible = false;
+
+                if (field.Name == nameof(enableMod))
                 {
-                    this.SetFieldVisible(field, true);
-                    continue;
+                    visible = true;
+                    if (visible && UpdateVisibilityDebug) Main.DebugLog($"[UpdateVisibility] Showing enableMod field: {field.Name}");
                 }
-                if (field.Name == nameof(Animal_Selection))
+                else if (field.Name == nameof(Selection_SettingsCategory) || field.Name == nameof(Selection_Preset))
                 {
-                    // Only show the animal selector when the Animal category is active.
-                    this.SetFieldVisible(field, Category_Selection == SettingsCategory.Animal);
-                    continue;
+                    visible = true;
+                    if (visible && UpdateVisibilityDebug) Main.DebugLog($"[UpdateVisibility] Showing selection field: {field.Name}");
+                }
+                else if (field.Name == nameof(Selection_Animal))
+                {
+                    visible = (Selection_SettingsCategory == SETTINGS_ANIMAL);
+                    if (visible && UpdateVisibilityDebug) Main.DebugLog($"[UpdateVisibility] Animal selector {field.Name}");
+                }
+                else if (field.Name.StartsWith("Animal_"))
+                {
+                    visible = (Selection_SettingsCategory == SETTINGS_ANIMAL && field.Name.Contains(GetAnimalFieldName(Selection_Animal)));
+                    if (visible && UpdateVisibilityDebug) Main.DebugLog($"[UpdateVisibility] Animal-specific field {field.Name}");
+                }
+                else if (field.Name.StartsWith("Global_"))
+                {
+                    visible = (Selection_SettingsCategory == SETTINGS_GLOBAL);
+                    if (visible && UpdateVisibilityDebug) Main.DebugLog($"[UpdateVisibility] Global field {field.Name}");
+                }
+                else if (field.Name.StartsWith("Extra_"))
+                {
+                    visible = (Selection_SettingsCategory == SETTINGS_EXTRA);
+                    if (visible && UpdateVisibilityDebug) Main.DebugLog($"[UpdateVisibility] Extra field {field.Name}");
+                }
+                else
+                {
+                    visible = false;
                 }
 
-                bool handled = false;
-                foreach (var kvp in categoryPrefixes)
-                {
-                    string prefix = kvp.Value;
-                    if (field.Name.StartsWith(prefix))
-                    {
-                        handled = true;
-                        if (kvp.Key == SettingsCategory.Animal)
-                        {
-                            // Only show animal-specific fields if the selected category is Animal.
-                            if (Category_Selection == SettingsCategory.Animal)
-                            {
-                                bool shouldShow = field.Name.Contains(Animal_Selection.ToString());
-                                this.SetFieldVisible(field, shouldShow);
-                            }
-                            else
-                            {
-                                this.SetFieldVisible(field, false);
-                            }
-                        }
-                        else
-                        {
-                            // For Global or Extra, show the field only if the selected category matches.
-                            bool shouldShow = (Category_Selection == kvp.Key);
-                            this.SetFieldVisible(field, shouldShow);
-                        }
-                        break;
-                    }
-                }
-                if (!handled)
-                    this.SetFieldVisible(field, true);
+                this.SetFieldVisible(field, visible);
             }
-            RefreshGUI();
         }
 
+
+        bool OnChangeDebug = false;
 
         // --------------------------------------------------------------------
         // Change handling & visibility logic.
         // --------------------------------------------------------------------
         protected override void OnChange(FieldInfo field, object oldValue, object newValue)
         {
-            // These fields should trigger visibility updates.
-            if (field.Name == nameof(enableMod) || field.Name == nameof(Category_Selection) || field.Name == nameof(Animal_Selection))
+
+            if (OnChangeDebug) Main.DebugLog($"OnChange triggered: Field={field.Name}, OldValue={oldValue}, NewValue={newValue}");
+
+            if (isApplyingPreset)
             {
+                if (OnChangeDebug) Main.DebugLog("OnChange suppressed: Preset is being applied.");
+                return;
+            }
+
+            if (field.Name == nameof(Selection_Preset))
+            {
+                // For preset changes, update confirmedValues and apply the preset.
+                UpdateConfirmedValue(field);
+                isApplyingPreset = true;
+                ApplyPreset(Selection_Preset);
+                RefreshGUI();
+                isApplyingPreset = false;
+                if (OnChangeDebug) Main.DebugLog($"Preset changed. {oldValue} -> {newValue}");
+            }
+            else if (field.Name == nameof(enableMod) ||
+                     field.Name == nameof(Selection_SettingsCategory) ||
+                     field.Name == nameof(Selection_Animal))
+            {
+                UpdateConfirmedValue(field);
                 UpdateVisibility();
             }
-            else if (field.Name == nameof(Preset_Selection))
-            {
-                ApplyPreset((PresetOptions)newValue);
-            }
-            // Changing these fields trigger the preset to change to Custom if it wasn't already.
-            else if ((field.Name.StartsWith("Animal_") || field.Name.StartsWith("Global_") || field.Name.StartsWith("Extra_"))
+            else if ((field.Name.StartsWith("Animal_") ||
+                      field.Name.StartsWith("Global_") ||
+                      field.Name.StartsWith("Extra_"))
                      && field.Name != "Extra_EnableDebug")
             {
-                if (Preset_Selection != PresetOptions.Custom)
+                if (OnChangeDebug) Main.DebugLog($"Animal, Global, or Extra Field changed: {field.Name}");
+                // If any of these fields change while not in Custom, switch the preset to Custom.
+                if (Selection_Preset != PRESET_CUSTOM)
                 {
-                    Main.DebugLog("Switching to Custom Preset_Selection due to modification of an Animal_, Global_ or Extra_ setting.");
+                    if (OnChangeDebug) Main.DebugLog($"Read-only preset value changed. Switching to custom preset.");
                     isApplyingPreset = true;
                     try
                     {
-                        Preset_Selection = PresetOptions.Custom;
+                        Selection_Preset = PRESET_CUSTOM;
+                        // Update confirmedValues for Selection_Preset so the change persists.
+                        UpdateConfirmedValue(GetType().GetField(nameof(Selection_Preset)));
+                        RefreshGUI();
                     }
                     finally
                     {
                         isApplyingPreset = false;
                     }
                 }
+                if (OnChangeDebug) Main.DebugLog($"Updating temporary custom value for: {field.Name} = {newValue}");
             }
             base.OnChange(field, oldValue, newValue);
         }
 
 
-        private void ApplyPreset(PresetOptions presetOption)
+        private void UpdateConfirmedValue(FieldInfo field)
         {
-            isApplyingPreset = true; 
-            Main.DebugLog($"Applying Preset_Selection: {presetOption}");
-            
+            // Use reflection to update the internal confirmedValues dictionary in ModSettingsBase.
+            var baseType = typeof(ModSettingsBase);
+            var confirmedValuesField = baseType.GetField("confirmedValues", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (confirmedValuesField != null)
+            {
+                var confirmed = (Dictionary<FieldInfo, object>)confirmedValuesField.GetValue(this);
+                confirmed[field] = field.GetValue(this);
+                if (OnChangeDebug) Main.DebugLog($"[UpdateConfirmedValue] Field {field.Name} updated in confirmedValues.");
+            }
+        }
+
+
+        private void ApplyPreset(int presetOption)
+        {
             try
             {
                 switch (presetOption)
                 {
-                    case PresetOptions.Vanilla: ApplyVanillaPreset(); break;
-                    case PresetOptions.Realistic: ApplyRealisticPreset(); break;
-                    case PresetOptions.Balanced: ApplyBalancedPreset(); break;
-                    case PresetOptions.Custom: LoadCustomSettings(); break; // Load saved "Custom" instance     
+                    case PRESET_VANILLA: ApplyVanillaPreset(); break;
+                    case PRESET_REALISTIC: ApplyRealisticPreset(); break;
+                    case PRESET_BALANCED: ApplyBalancedPreset(); break;
+                    case PRESET_CUSTOM: LoadCustomSettings(); break;
                 }
-            }    
-            finally    
-            {     
-                isApplyingPreset = false;
-                Main.DebugLog("Preset application complete.");
             }
-            RefreshGUI();
-
+            finally
+            {
+                Main.DebugLog($"[ApplyPreset] Preset {presetOption} applied!");
+            }
         }
-
 
 
         protected override void OnConfirm()
         {
             Main.DebugLog("OnConfirm triggered.");
 
-            // Save instance only if the Preset_Selection is "Custom"
-            if (Preset_Selection == PresetOptions.Custom)
+            // Save instance only if the preset is "Custom".
+            if (Selection_Preset == PRESET_CUSTOM)
             {
-                Main.DebugLog("Saving Custom Preset_Selection instance to backup.");
+                Main.DebugLog("Saving Custom preset instance to backup.");
                 foreach (var field in GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
                 {
                     customSettingsBackup[field.Name] = field.GetValue(this);
-                    //Main.DebugLog($"Saved Custom instance: {field.Name} = {customSettingsBackup[field.Name]}");
                 }
             }
-
             base.OnConfirm();
             Main.DebugLog("Settings confirmed and saved.");
         }
 
         private void LoadCustomSettings()
         {
-            Main.DebugLog("Loading Custom instance from backup.");
+            Main.DebugLog("Loading Custom preset from backup.");
             foreach (var entry in customSettingsBackup)
             {
                 var field = GetType().GetField(entry.Key, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                 if (field != null)
                 {
                     field.SetValue(this, entry.Value);
-                    Main.DebugLog($"Custom instance loaded: {entry.Key} = {entry.Value}");
+                    Main.DebugLog($"Custom preset loaded: {entry.Key} = {entry.Value}");
                 }
             }
         }
@@ -215,12 +259,12 @@ namespace CarcassYieldTweaker
             "\n will copy those settings to Custom, which can then be modified." +
             "\n\n IMPORTANT: Custom settings must be saved by clicking Confirm.")]
         [Choice(new string[] { "Vanilla", "Realistic", "Balanced", "Custom" })]
-        public PresetOptions Preset_Selection = PresetOptions.Vanilla;
+        public int Selection_Preset;
 
         [Name("Settings")]
-        [Description("Choose which settings to modify: Global, Per Animal, or Extra.")]
-        [Choice(new string[] { "Global", "Per Animal", "Extra" })]
-        public SettingsCategory Category_Selection = SettingsCategory.Global;
+        [Description("Choose which settings to modify: Global, Animal, or Extra.")]
+        [Choice(new string[] { "Global", "Animal", "Extra" })]
+        public int Selection_SettingsCategory;
 
         [Name("Quarter Waste Weight Multiplier")]
         [Description("Changes the amount of unharvestable waste in quarters. Vanilla value is 2 which means your quarters weigh twice as much as the meat you'll get from them.")]
@@ -286,13 +330,13 @@ namespace CarcassYieldTweaker
         [Slider(0.01f, 3.00f, NumberFormat = "{0:F2}x")]
         public float Global_GutTimeSlider = VanillaSettings.GutTimeSliderGlobal;
 
-        
+
         /// ===================================================================================================================================================
         // Animal selection 
         [Name("Select Animal")]
         [Description("Choose an animal's to change it's harvest settings")]
         [Choice(new string[] { "Rabbit", "Ptarmigan", "Doe", "Stag", "Moose", "Wolf", "Timber Wolf", "Poisoned Wolf", "Bear", "Cougar" })]
-        public AnimalType Animal_Selection = AnimalType.Rabbit;
+        public int Selection_Animal;
 
         // ===============================================================================
         //[Section("Rabbit")]
@@ -652,7 +696,7 @@ namespace CarcassYieldTweaker
             "10% at level  3\n" +
             "20% at level 4\n" +
             "30% at level 5")]
-        [Slider(0.01f, 2.0f, NumberFormat = "{0:F2}x")]
+        [Slider(0.01f, 2.00f, NumberFormat = "{0:F2}x")]
         public float Animal_HideTimeSliderPoisonedWolf = VanillaSettings.HideTimeSliderPoisonedWolf;
 
 
@@ -700,7 +744,7 @@ namespace CarcassYieldTweaker
                     "10% at level  3\n" +
                     "20% at level 4\n" +
                     "30% at level 5")]
-        [Slider(0.01f, 2.0f, NumberFormat = "{0:F2}x")]
+        [Slider(0.01f, 3.00f, NumberFormat = "{0:F2}x")]
         public float Animal_HideTimeSliderBear = VanillaSettings.HideTimeSliderBear;
 
         [Name("Quarter Time")]
@@ -753,7 +797,7 @@ namespace CarcassYieldTweaker
             "10% at level  3\n" +
             "20% at level 4\n" +
             "30% at level 5")]
-        [Slider(0.01f, 2.0f, NumberFormat = "{0:F2}x")]
+        [Slider(0.01f, 2.00f, NumberFormat = "{0:F2}x")]
         public float Animal_HideTimeSliderCougar = VanillaSettings.HideTimeSliderCougar;
 
         [Name("Quarter Time")]
@@ -798,8 +842,6 @@ namespace CarcassYieldTweaker
         private void ApplyVanillaPreset()
         {
             // Set Vanilla Values from the VanillaSettings class
-            Main.DebugLog("Applying Vanilla Preset_Selection.");
-
 
             // Global Settings
             this.Global_QuarterWasteSlider = VanillaSettings.QuarterWasteMultiplier;
@@ -917,8 +959,9 @@ namespace CarcassYieldTweaker
         private void ApplyRealisticPreset()
         {
             // Realistic Preset - Meat values are based on data from Canadian encyclopedia (see DATA.xlsx)
-            Main.DebugLog("Applying Realistic Preset_Selection.");
-
+            //
+            // ********** WARNING - ALL VALUES MUST HAVE A MAXIUMUM OF 2 DECIMALS! *************************
+            //
             // Global
             this.Global_QuarterWasteSlider = 1.2f; // Less waste
             this.Global_MeatTimeSlider = 1f; // Unchanged
@@ -955,7 +998,7 @@ namespace CarcassYieldTweaker
             this.Animal_GutCountSliderStag = 15;
             this.Animal_QuarterSizeSliderStag = 15f;
             this.Animal_FatToMeatPercentSliderStag = 4; // Stags have a bit more fat
-            this.Animal_HideTimeSliderStag = 1.125f; // Realistic time for processing a stag hide
+            this.Animal_HideTimeSliderStag = 1.13f; // Realistic time for processing a stag hide
             this.Animal_QuarterDurationMinutesSliderStag = 60;
 
             // Moose
@@ -975,7 +1018,7 @@ namespace CarcassYieldTweaker
             this.Animal_GutCountSliderRegularWolf = 6;
             this.Animal_QuarterSizeSliderRegularWolf = 7f;
             this.Animal_FatToMeatPercentSliderRegularWolf = 2;
-            this.Animal_HideTimeSliderRegularWolf = 0.625f; // Realistic time for processing a wolf hide
+            this.Animal_HideTimeSliderRegularWolf = 0.63f; // Realistic time for processing a wolf hide
             this.Animal_QuarterDurationMinutesSliderRegularWolf = 20;
 
             // TimberWolf
@@ -1016,7 +1059,9 @@ namespace CarcassYieldTweaker
         private void ApplyBalancedPreset()
         {
             // Realistic (Balanced) Preset - Meat values are based on data from Canadian encyclopedia (see DATA.xlsx)
-            Main.DebugLog("Applying Balanced Preset_Selection.");
+            //
+            // ********** WARNING - ALL VALUES MUST HAVE A MAXIUMUM OF 2 DECIMALS! *************************
+            //
             // Rabbit
             this.Animal_MeatSliderMinRabbit = 0.75f; // Realistic unchanged
             this.Animal_MeatSliderMaxRabbit = 1.5f; // Realistic unchanged
@@ -1116,6 +1161,9 @@ namespace CarcassYieldTweaker
 
     internal static class VanillaSettings // Define Vanilla Settings (only once) - only the descriptions will need updated if something changes
     {
+        //
+        // ********** WARNING - ALL VALUES MUST HAVE A MAXIUMUM OF 2 DECIMALS! *************************
+        //
         // Global
         internal static float QuarterWasteMultiplier = 2.0f;
         internal static float MeatTimeSliderGlobal = 1f;
