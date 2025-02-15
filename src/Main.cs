@@ -6,18 +6,19 @@ namespace CarcassYieldTweaker
 {
     public class Main : MelonMod
     {
-        internal static void DebugLog(string message)
-        {
-            if (Settings.instance.Extra_EnableDebug)
-            {
-                MelonLogger.Msg($"[Debug] {message}");
-            }
-        }
-
         public override void OnInitializeMelon()
         {
             MelonLogger.Msg($"Version {Info.Version} loaded!");
             Settings.OnLoad();
         }
+
+        internal static void DebugLog(string message)
+        {
+            if (Settings.Instance.Extra_EnableDebug)
+            {
+                MelonLogger.Msg($"[Debug] {message}");
+            }
+        }
+
     }
 }

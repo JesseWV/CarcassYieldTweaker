@@ -4,19 +4,16 @@ using System.Collections.Generic;
 
 namespace CarcassYieldTweaker
 {
-
-
-    internal static class Settings
+    public class Settings : JsonModSettings
     {
-        internal static CarcassYieldTweakerSettings instance = new();
+        internal static Settings Instance { get; } = new();
+
         internal static void OnLoad()
         {
-            instance.AddToModSettings("Carcass Yield Tweaker");
-            instance.UpdateVisibility();
+            Instance.AddToModSettings("Carcass Yield Tweaker");
+            Instance.UpdateVisibility();
         }
-    }
-    internal class CarcassYieldTweakerSettings : JsonModSettings
-    {
+
         // Define enums for presets and animal selection.
         public enum PresetOptions { Vanilla, Realistic, Balanced, Custom }
         public enum SettingsCategory { Global, Animal, Extra }
@@ -1110,10 +1107,13 @@ namespace CarcassYieldTweaker
 
             // Quarter Waste Multiplier
             this.Global_QuarterWasteSlider = 1.2f;
-        }
-    }
+        } 
 
-    
+    } // End of Settings Class
+
+
+
+
     internal static class VanillaSettings // Define Vanilla Settings (only once) - only the descriptions will need updated if something changes
     {
         // Global
@@ -1231,5 +1231,6 @@ namespace CarcassYieldTweaker
         internal static int QuarterDurationMinutesSliderCougar = 120;
         internal static float DecayRateMultiplierSliderCougar = 1f;
 
-    }
-}
+    } // End of VanillaSettings namespace
+
+} // End of CarcassHarvestSettings namespace
