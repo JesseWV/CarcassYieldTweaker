@@ -153,10 +153,7 @@ namespace CarcassYieldTweaker
                 UpdateConfirmedValue(field);
                 UpdateVisibility();
             }
-            else if ((field.Name.StartsWith("Animal_") ||
-                      field.Name.StartsWith("Global_") ||
-                      field.Name.StartsWith("Extra_"))
-                     && field.Name != "Extra_EnableDebug")
+            else if ( field.Name.StartsWith("Animal_") || field.Name.StartsWith("Global_") )
             {
                 if (OnChangeDebug) Main.DebugLog($"Animal, Global, or Extra Field changed: {field.Name}");
                 // If any of these fields change while not in Custom, switch the preset to Custom.
@@ -254,10 +251,10 @@ namespace CarcassYieldTweaker
 
         [Name("Preset")]
         [Description("\n\nChoose a Preset. " +
-            "\n Vanilla, Realistic, and Balanced are read-only!" +
-            "\n Changing any setting while in these presets" +
-            "\n will copy those settings to Custom, which can then be modified." +
-            "\n\n IMPORTANT: Custom settings must be saved by clicking Confirm.")]
+            "\nVanilla, Realistic, and Balanced are read-only!" +
+            "\nChanging any Animal or Global setting while in these presets" +
+            "\nwill copy those settings to Custom, which can then be modified." +
+          "\n\nIMPORTANT: Custom settings are ONLY SAVED by CLICKING CONFIRM! .")]
         [Choice(new string[] { "Vanilla", "Realistic", "Balanced", "Custom" })]
         public int Selection_Preset;
 
@@ -267,18 +264,19 @@ namespace CarcassYieldTweaker
         public int Selection_SettingsCategory;
 
         [Name("Quarter Waste Weight Multiplier")]
-        [Description("Changes the amount of unharvestable waste in quarters. Vanilla value is 2 which means your quarters weigh twice as much as the meat you'll get from them.")]
+        [Description("Changes the amount of unharvestable waste in quarters. Vanilla value is 2" +
+            "\nwhich means quarters weigh twice as much as the meat you'll get from them.")]
         [Slider(0.5f, 4.00f, NumberFormat = "{0:F1} x")]
-        public float Global_QuarterWasteSlider = VanillaSettings.QuarterWasteMultiplier;
+        public float Global_QuarterWasteSlider = VanillaSettings.Global_QuarterWasteMultiplier;
 
         [Name("Maximum Harvest Time")]
         [Description("Maximum time allowed in hours to harvest meat from a carcass. Vanilla value is 5 hours.")]
         [Slider(1f, 24f, NumberFormat = "{0:F1} hrs.")]
-        public float Global_MaxHarvestTimeSlider = VanillaSettings.MaxHarvestTimeSliderGlobal;
+        public float Global_MaxHarvestTimeSlider = VanillaSettings.Global_MaxHarvestTimeSliderGlobal;
 
         // Description values taken from https://thelongdark.fandom.com/wiki/Carcass_Harvesting 2024-12-22
         [Name("Meat (Thawed Carcass)")]
-        [Description("Global Meat harvest time multiplier. Vanilla value is 1.\n" +
+        [Description("Global meat harvest time multiplier for a thawed carcass. Vanilla value is 1.\n" +
                     "\nBase harvest rates are:\n" +
                     "30 min/kg with Bare Hands.\n" +
                     "20 min/kg with Improvised Hatchet.\n" +
@@ -292,10 +290,10 @@ namespace CarcassYieldTweaker
                     "30% at level  4\n" +
                     "50% at  level 5")]
         [Slider(0.01f, 3.00f, NumberFormat = "{0:F2}x")]
-        public float Global_MeatTimeSlider = VanillaSettings.MeatTimeSliderGlobal;
+        public float Global_MeatTimeSlider = VanillaSettings.Global_MeatTimeSlider;
 
         [Name("Meat (Frozen Carcass)")]
-        [Description("Global Frozen Meat harvest time multiplier. Vanilla value is 1.\n" +
+        [Description("Global meat harvest time multiplier for a frozen carcass. Vanilla value is 1.\n" +
                     "\nBase harvest rates are:\n" +
                     "Cannot harvest frozen meat with Bare Hands!\n" +
                     "30 min/kg with Improvised Knife.\n" +
@@ -313,7 +311,7 @@ namespace CarcassYieldTweaker
                     " 75% frozen at level  4\n" +
                     "100% frozen at level  5")]
         [Slider(0.01f, 3.00f, NumberFormat = "{0:F2}x")]
-        public float Global_FrozenMeatTimeSlider = VanillaSettings.FrozenMeatTimeSliderGlobal;
+        public float Global_FrozenMeatTimeSlider = VanillaSettings.Global_FrozenMeatTimeSlider;
 
         [Name("Gut")]
         [Description("Global Gut harvest time multiplier. Vanilla value is 1\n" +
@@ -328,7 +326,42 @@ namespace CarcassYieldTweaker
                     "20% at Level  4\n" +
                     "30% at Level  5")]
         [Slider(0.01f, 3.00f, NumberFormat = "{0:F2}x")]
-        public float Global_GutTimeSlider = VanillaSettings.GutTimeSliderGlobal;
+        public float Global_GutTimeSlider = VanillaSettings.Global_GutTimeSlider;
+
+
+        //=====================================================================================================================================================
+        //[Section("Extra Settings")]
+
+        [Name("Disable Carcass Decay")]
+        [Description("Completely disable the decay of animal carcasses. Vanilla is No")]
+        public bool Extra_DisableCarcassDecayGlobal = false;
+
+        [Name("Show Condition Percent")]
+        [Description("Show the condition of the carcass in the harvest Panel. Vanilla is No")]
+        public bool Extra_ShowPanelCondition = false;
+
+        [Name("Condition Text Color")]
+        [Description("Color the condition text according to the carcass condition percentage. Vanilla is No\n" +
+            "\n100% to 66% - Green" +
+            "\n 66% to 33% - Yellow" +
+            "\n 33% to  1% - Red")]
+        public bool Extra_ShowPanelConditionColors = false;
+
+        [Name("Always Show Frozen Percent")]
+        [Description("Always show the frozen percentage in the harvest Panel, even if the carcass is not frozen. Vanilla is No")]
+        public bool Extra_AlwaysShowPanelFrozenPercent = false;
+
+        [Name("Frozen Text Color")]
+        [Description("Color the frozen text according to the carcass frozen percentage. Vanilla is No\n" +
+            "\n  0% to  25% - Orange - Warm" +
+            "\n 25% to  50% - White - Cold" +
+            "\n 50% to  75% - Cyan - Frozen" +
+            "\n 75% to 100% - Blue - Frozen Solid")]
+        public bool Extra_ShowPanelFrozenColors = false;
+
+        [Name("Enable Debug Output")]
+        [Description("Toggle debug output to the log for troubleshooting. Vanilla is No")]
+        public bool Extra_EnableDebug = false;
 
 
         /// ===================================================================================================================================================
@@ -805,58 +838,25 @@ namespace CarcassYieldTweaker
         [Slider(1, 180, NumberFormat = "{0:#}m")]
         public int Animal_QuarterDurationMinutesSliderCougar = VanillaSettings.QuarterDurationMinutesSliderCougar;
 
-        //=====================================================================================================================================================
-        //[Section("Extra Settings")]
-
-        [Name("Disable Carcass Decay")]
-        [Description("Completely disable the decay of animal carcasses.")]
-        public bool Extra_DisableCarcassDecayGlobal = false;
-
-        [Name("Show Condition Percent")]
-        [Description("Show the condition of the carcass in the harvest Panel.")]
-        public bool Extra_ShowPanelCondition = false;
-
-        [Name("Condition Text Color")]
-        [Description("Color the condition text according to the carcass condition percentage.\n" +
-            "\n100% to 66% - Green" +
-            "\n 66% to 33% - Yellow" +
-            "\n 33% to  1% - Red")]
-        public bool Extra_ShowPanelConditionColors = false;
-
-        [Name("Always Show Frozen Percent")]
-        [Description("Always show the frozen percentage in the harvest Panel, even if the carcass is not frozen.")]
-        public bool Extra_AlwaysShowPanelFrozenPercent = false;
-
-        [Name("Frozen Text Color")]
-        [Description("Color the frozen text according to the carcass frozen percentage.\n" +
-            "\n  0% to  25% - Orange - Warm" +
-            "\n 25% to  50% - White - Cold" +
-            "\n 50% to  75% - Cyan - Frozen" +
-            "\n 75% to 100% - Blue - Frozen Solid")]
-        public bool Extra_ShowPanelFrozenColors = false;
-
-        [Name("Enable Debug Output")]
-        [Description("Toggle debug output to the log for troubleshooting.")]
-        public bool Extra_EnableDebug = false;
+       
 
         private void ApplyVanillaPreset()
         {
             // Set Vanilla Values from the VanillaSettings class
 
             // Global Settings
-            this.Global_QuarterWasteSlider = VanillaSettings.QuarterWasteMultiplier;
-            this.Global_MeatTimeSlider = VanillaSettings.MeatTimeSliderGlobal;
-            this.Global_FrozenMeatTimeSlider = VanillaSettings.FrozenMeatTimeSliderGlobal;
-            this.Global_GutTimeSlider = VanillaSettings.GutTimeSliderGlobal;
-            this.Global_MaxHarvestTimeSlider = VanillaSettings.MaxHarvestTimeSliderGlobal;
-            //this.AdjustExistingCarcasses = VanillaSettings.ModifyNativeCarcassesGlobal;
+            this.Global_QuarterWasteSlider = VanillaSettings.Global_QuarterWasteMultiplier;
+            this.Global_MeatTimeSlider = VanillaSettings.Global_MeatTimeSlider;
+            this.Global_FrozenMeatTimeSlider = VanillaSettings.Global_FrozenMeatTimeSlider;
+            this.Global_GutTimeSlider = VanillaSettings.Global_GutTimeSlider;
+            this.Global_MaxHarvestTimeSlider = VanillaSettings.Global_MaxHarvestTimeSliderGlobal;
 
-            // Extra Settings
-            this.Extra_ShowPanelCondition = VanillaSettings.ShowPanelCondition;
-            this.Extra_ShowPanelConditionColors = VanillaSettings.ShowPanelConditionColors;
-            this.Extra_AlwaysShowPanelFrozenPercent = VanillaSettings.AlwaysShowPanelFrozenPercent;
-            this.Extra_ShowPanelFrozenColors = VanillaSettings.ShowPanelFrozenColors;
-            this.Extra_DisableCarcassDecayGlobal = VanillaSettings.DisableCarcassDecayGlobal;
+            //// Extra Settings
+            //this.Extra_ShowPanelCondition = VanillaSettings.ShowPanelCondition;
+            //this.Extra_ShowPanelConditionColors = VanillaSettings.ShowPanelConditionColors;
+            //this.Extra_AlwaysShowPanelFrozenPercent = VanillaSettings.AlwaysShowPanelFrozenPercent;
+            //this.Extra_ShowPanelFrozenColors = VanillaSettings.ShowPanelFrozenColors;
+            //this.Extra_DisableCarcassDecayGlobal = VanillaSettings.DisableCarcassDecayGlobal;
 
             // Rabbit
             this.Animal_MeatSliderMinRabbit = VanillaSettings.MeatSliderMinRabbit;
@@ -864,14 +864,12 @@ namespace CarcassYieldTweaker
             this.Animal_HideCountSliderRabbit = VanillaSettings.HideCountSliderRabbit;
             this.Animal_GutCountSliderRabbit = VanillaSettings.GutCountSliderRabbit;
             this.Animal_HideTimeSliderRabbit = VanillaSettings.HideTimeSliderRabbit;
-            //this.DecayRateMultiplierSliderRabbit = VanillaSettings.DecayRateMultiplierSliderRabbit;
 
             // Ptarmigan (DLC)
             this.Animal_MeatSliderMinPtarmigan = VanillaSettings.MeatSliderMinPtarmigan;
             this.Animal_MeatSliderMaxPtarmigan = VanillaSettings.MeatSliderMaxPtarmigan;
             this.Animal_HideCountSliderPtarmigan = VanillaSettings.HideCountSliderPtarmigan;
             this.Animal_HideTimeSliderPtarmigan = VanillaSettings.HideTimeSliderPtarmigan;
-            //this.DecayRateMultiplierSliderPtarmigan = VanillaSettings.DecayRateMultiplierSliderPtarmigan;
 
             // Doe
             this.Animal_MeatSliderMinDoe = VanillaSettings.MeatSliderMinDoe;
@@ -882,7 +880,6 @@ namespace CarcassYieldTweaker
             this.Animal_FatToMeatPercentSliderDoe = VanillaSettings.FatToMeatPercentSliderDoe;
             this.Animal_HideTimeSliderDoe = VanillaSettings.HideTimeSliderDoe;
             this.Animal_QuarterDurationMinutesSliderDoe = VanillaSettings.QuarterDurationMinutesSliderDoe;
-            //this.DecayRateMultiplierSliderDoe = VanillaSettings.DecayRateMultiplierSliderDoe;
 
             // Stag
             this.Animal_MeatSliderMinStag = VanillaSettings.MeatSliderMinStag;
@@ -893,7 +890,6 @@ namespace CarcassYieldTweaker
             this.Animal_FatToMeatPercentSliderStag = VanillaSettings.FatToMeatPercentSliderStag;
             this.Animal_HideTimeSliderStag = VanillaSettings.HideTimeSliderStag;
             this.Animal_QuarterDurationMinutesSliderStag = VanillaSettings.QuarterDurationMinutesSliderStag;
-            //this.DecayRateMultiplierSliderStag = VanillaSettings.DecayRateMultiplierSliderStag;    
 
             // Moose
             this.Animal_MeatSliderMinMoose = VanillaSettings.MeatSliderMinMoose;
@@ -904,7 +900,6 @@ namespace CarcassYieldTweaker
             this.Animal_FatToMeatPercentSliderMoose = VanillaSettings.FatToMeatPercentSliderMoose;
             this.Animal_HideTimeSliderMoose = VanillaSettings.HideTimeSliderMoose;
             this.Animal_QuarterDurationMinutesSliderMoose = VanillaSettings.QuarterDurationMinutesSliderMoose;
-            //this.DecayRateMultiplierSliderMoose = VanillaSettings.DecayRateMultiplierSliderMoose;
 
             // Wolf
             this.Animal_MeatSliderMinRegularWolf = VanillaSettings.MeatSliderMinRegularWolf;
@@ -915,7 +910,6 @@ namespace CarcassYieldTweaker
             this.Animal_FatToMeatPercentSliderRegularWolf = VanillaSettings.FatToMeatPercentSliderRegularWolf;
             this.Animal_HideTimeSliderRegularWolf = VanillaSettings.HideTimeSliderRegularWolf;
             this.Animal_QuarterDurationMinutesSliderRegularWolf = VanillaSettings.QuarterDurationMinutesSliderRegularWolf;
-            //this.DecayRateMultiplierSliderWolf = VanillaSettings.DecayRateMultiplierSliderWolf;
 
             // TimberWolf
             this.Animal_MeatSliderMinTimberWolf = VanillaSettings.MeatSliderMinTimberWolf;
@@ -926,13 +920,11 @@ namespace CarcassYieldTweaker
             this.Animal_FatToMeatPercentSliderTimberWolf = VanillaSettings.FatToMeatPercentSliderTimberWolf;
             this.Animal_HideTimeSliderTimberWolf = VanillaSettings.HideTimeSliderTimberWolf;
             this.Animal_QuarterDurationMinutesSliderTimberWolf = VanillaSettings.QuarterDurationMinutesSliderTimberWolf;
-            //this.DecayRateMultiplierSliderTimberWolf = VanillaSettings.DecayRateMultiplierSliderTimberWolf;
 
             // Poisoned Wolf (DLC)
             this.Animal_HideCountSliderPoisonedWolf = VanillaSettings.HideCountSliderPoisonedWolf;
             this.Animal_GutCountSliderPoisonedWolf = VanillaSettings.GutCountSliderPoisonedWolf;
             this.Animal_HideTimeSliderPoisonedWolf = VanillaSettings.HideTimeSliderPoisonedWolf;
-            //this.DecayRateMultiplierSliderPoisonedWolf = VanillaSettings.DecayRateMultiplierSliderPoisonedWolf;
 
             // Bear
             this.Animal_MeatSliderMinBear = VanillaSettings.MeatSliderMinBear;
@@ -943,7 +935,6 @@ namespace CarcassYieldTweaker
             this.Animal_FatToMeatPercentSliderBear = VanillaSettings.FatToMeatPercentSliderBear;
             this.Animal_HideTimeSliderBear = VanillaSettings.HideTimeSliderBear;
             this.Animal_QuarterDurationMinutesSliderBear = VanillaSettings.QuarterDurationMinutesSliderBear;
-            //this.DecayRateMultiplierSliderBear = VanillaSettings.DecayRateMultiplierSliderBear;
 
             // Cougar
             this.Animal_MeatSliderMinCougar = VanillaSettings.MeatSliderMinCougar;
@@ -954,7 +945,6 @@ namespace CarcassYieldTweaker
             this.Animal_FatToMeatPercentSliderCougar = VanillaSettings.FatToMeatPercentSliderCougar;
             this.Animal_HideTimeSliderCougar = VanillaSettings.HideTimeSliderCougar;
             this.Animal_QuarterDurationMinutesSliderCougar = VanillaSettings.QuarterDurationMinutesSliderCougar;
-            //this.DecayRateMultiplierSliderCougar = VanillaSettings.DecayRateMultiplierSliderCougar;
         }
         private void ApplyRealisticPreset()
         {
@@ -991,7 +981,7 @@ namespace CarcassYieldTweaker
             this.Animal_HideTimeSliderDoe = 0.75f; // Realistic time for processing a doe hide
             this.Animal_QuarterDurationMinutesSliderDoe = 30;
 
-            //// Stag
+            // Stag
             this.Animal_MeatSliderMinStag = 38f;
             this.Animal_MeatSliderMaxStag = 57f;
             this.Animal_HideCountSliderStag = 1;
@@ -1165,20 +1155,18 @@ namespace CarcassYieldTweaker
         // ********** WARNING - ALL VALUES MUST HAVE A MAXIUMUM OF 2 DECIMALS! *************************
         //
         // Global
-        internal static float QuarterWasteMultiplier = 2.0f;
-        internal static float MeatTimeSliderGlobal = 1f;
-        internal static float FrozenMeatTimeSliderGlobal = 1f;
-        internal static float GutTimeSliderGlobal = 1f;
-        //internal static float DecayRateMultiplierSliderGlobal = 1f;
-        internal static float MaxHarvestTimeSliderGlobal = 5f;
-        internal static bool ModifyNativeCarcassesGlobal = false;
+        internal static float Global_QuarterWasteMultiplier = 2.0f;
+        internal static float Global_MeatTimeSlider = 1f;
+        internal static float Global_FrozenMeatTimeSlider = 1f;
+        internal static float Global_GutTimeSlider = 1f;
+        internal static float Global_MaxHarvestTimeSliderGlobal = 5f;
 
-        // Extra Settings
-        internal static bool AlwaysShowPanelFrozenPercent = false;
-        internal static bool ShowPanelFrozenColors = false;
-        internal static bool ShowPanelCondition = false;
-        internal static bool ShowPanelConditionColors = false;
-        internal static bool DisableCarcassDecayGlobal = false;
+        //// Extra Settings
+        //internal static bool AlwaysShowPanelFrozenPercent = false;
+        //internal static bool ShowPanelFrozenColors = false;
+        //internal static bool ShowPanelCondition = false;
+        //internal static bool ShowPanelConditionColors = false;
+        //internal static bool DisableCarcassDecayGlobal = false;
 
         // Rabbit
         internal static float MeatSliderMinRabbit = 0.75f;
