@@ -7,7 +7,6 @@ using UnityEngine;
 using System.Reflection;
 using System.Collections.Generic;
 using System.Linq;
-using static Il2CppTMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
 
 namespace CarcassYieldTweaker
 {
@@ -33,7 +32,14 @@ namespace CarcassYieldTweaker
                     { "WILDLIFE_Wolf_grey", Settings.Instance.Animal_HideTimeSliderTimberWolf },
                     { "WILDLIFE_Wolf_Starving", Settings.Instance.Animal_HideTimeSliderPoisonedWolf },
                     { "WILDLIFE_Bear", Settings.Instance.Animal_HideTimeSliderBear },
-                    { "WILDLIFE_Cougar", Settings.Instance.Animal_HideTimeSliderCougar }
+                    { "WILDLIFE_Cougar", Settings.Instance.Animal_HideTimeSliderCougar },
+                    { "CORPSE_Stag", Settings.Instance.Animal_HideTimeSliderStag },
+                    { "CORPSE_Moose", Settings.Instance.Animal_HideTimeSliderMoose },
+                    { "CORPSE_Wolf", Settings.Instance.Animal_HideTimeSliderRegularWolf },
+                    { "CORPSE_Wolf_grey", Settings.Instance.Animal_HideTimeSliderTimberWolf },
+                    { "CORPSE_Wolf_Starving", Settings.Instance.Animal_HideTimeSliderPoisonedWolf },
+                    { "CORPSE_Bear", Settings.Instance.Animal_HideTimeSliderBear },
+                    { "CORPSE_Cougar", Settings.Instance.Animal_HideTimeSliderCougar }
                 };
 
                 // Default to global multipliers for Meat, FrozenMeat, and Gut - can be expanded by adding additional dictionaries if needed
@@ -47,7 +53,14 @@ namespace CarcassYieldTweaker
                 // Determine the multiplier based on item type
                 if (itemType == "Hide")
                 {
-                    if (!animalHideMultipliers.TryGetValue(animalType, out rawMultiplier))
+                    // Use StartsWith instead of exact match
+                    var matchingKey = animalHideMultipliers.Keys.FirstOrDefault(k => animalType.StartsWith(k));
+
+                    if (matchingKey != null)
+                    {
+                        rawMultiplier = animalHideMultipliers[matchingKey];
+                    }
+                    else
                     {
                         rawMultiplier = 1.0f; // Default for unknown animals
                         Main.DebugLog($"[UNKNOWN ANIMAL!: {animalType}] Using default Hide multiplier: {rawMultiplier:F2}");
@@ -146,8 +159,8 @@ namespace CarcassYieldTweaker
 
                         Main.DebugLog($"Meat {originalSettingsValues["m_HarvestMeatMinutesPerKG"]} m/kg -> {newHarvestMeatMinutesPerKG} m/kg ({meatMultiplier:F2}x) | " +
                                       $"FrozenMeat {originalSettingsValues["m_HarvestFrozenMeatMinutesPerKG"]} m/kg -> {newHarvestFrozenMeatMinutesPerKG} m/kg ({frozenMeatMultiplier:F2}x) | " +
-                                      $"Gut {originalSettingsValues["m_HarvestHideMinutesPerUnit"]} m/unit -> {newHarvestHideMinutesPerUnit} m/unit ({gutMultiplier:F2}x) | " +
-                                      $"Hide {originalSettingsValues["m_HarvestGutMinutesPerUnit"]} m/unit -> {newHarvestGutMinutesPerUnit} m/unit ({hideMultiplier:F2}x) - Settings");
+                                      $"Gut {originalSettingsValues["m_HarvestGutMinutesPerUnit"]} m/unit -> {newHarvestGutMinutesPerUnit} m/unit ({gutMultiplier:F2}x) | " +
+                                      $"Hide {originalSettingsValues["m_HarvestHideMinutesPerUnit"]} m/unit -> {newHarvestHideMinutesPerUnit} m/unit ({hideMultiplier:F2}x) - Settings");
 
 
                         // Modify BodyHarvestItems
@@ -222,15 +235,16 @@ namespace CarcassYieldTweaker
 
                             if (originalItemValues.TryGetValue(item, out var values))
                             {
+                                //Main.DebugLog($"[Close] Restoring original harvest time settings for {item.name}.");
                                 ModifyFieldValue(item, "set_m_HarvestMeatMinutesPerKG", values.meat);
                                 ModifyFieldValue(item, "set_m_HarvestFrozenMeatMinutesPerKG", values.frozenMeat);
                                 ModifyFieldValue(item, "set_m_HarvestGutMinutesPerUnit", values.gut);
                                 ModifyFieldValue(item, "set_m_HarvestHideMinutesPerUnit", values.hide);
                             }
                         }
+                        Main.DebugLog($"[Close] Restored original harvest time settings and harvest time values for {originalItemValues.Count} tools.");
                         originalItemValues.Clear();
 
-                        Main.DebugLog($"[Close] Restored original harvest time settings and harvest time values for {originalItemValues.Count} tools.");
 
                     }
                     catch (Exception ex)
@@ -239,6 +253,8 @@ namespace CarcassYieldTweaker
                     }
                 }
             } // End of Patch_ResetHarvestTimes
+
+
 
             // Patch to change the maxiumum harvest time 
             [HarmonyPatch(typeof(Il2Cpp.Panel_BodyHarvest), nameof(Panel_BodyHarvest.Enable), new Type[] { typeof(bool), typeof(Il2Cpp.BodyHarvest), typeof(bool), typeof(Il2Cpp.ComingFromScreenCategory) })]
@@ -557,7 +573,13 @@ namespace CarcassYieldTweaker
                             __instance.m_FatToMeatRatio = Settings.Instance.Animal_FatToMeatPercentSliderCougar / 100f;
                         }
 
+
+
                         //Main.DebugLog($"{__instance.name} New fat threeItemRatio: " + __instance.m_FatToMeatRatio);
+
+                        // Quarter Bag Waste Multiplier
+                        __instance.m_QuarterBagWasteMultiplier = Settings.Instance.Global_QuarterWasteSlider;
+
 
                     }
                     catch (Exception ex)
