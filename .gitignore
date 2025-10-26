@@ -353,3 +353,6 @@ MigrationBackup/
 /UseableMeatMod.sln
 /UseableMeatMod.sln
 /TLD_UseableMeat_DATA.xlsx
+
+# GitHub access token
+.github-token
